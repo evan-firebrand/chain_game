@@ -1,0 +1,39 @@
+{
+  "name": "2248",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint .",
+    "preview": "vite preview",
+    "harness": "npx tsx scripts/harness.ts",
+    "bench": "npx tsx scripts/harness.ts bench",
+    "sweep": "npx tsx scripts/harness.ts sweep",
+    "baseline": "npx tsx scripts/harness.ts baseline",
+    "study": "npx tsx scripts/harness.ts study",
+    "replay": "npx tsx scripts/harness.ts replay",
+    "compare": "npx tsx scripts/harness.ts compare",
+    "power": "npx tsx scripts/harness.ts power",
+    "describe": "npx tsx scripts/harness.ts describe"
+  },
+  "dependencies": {
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/node": "^24.12.2",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.5.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.58.2",
+    "vite": "^8.0.9"
+  }
+}

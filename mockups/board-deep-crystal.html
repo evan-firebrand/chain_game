@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>2248 — Deep Crystal Mockup</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #070a14;
+      --bg-elev: #0d1122;
+      --bg-board: #080b18;
+      --text: #7a8ab0;
+      --text-h: #b8cae8;
+      --text-dim: #363f60;
+      --border: #172040;
+      --accent: #f0a030;
+      --danger: #f05868;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Outfit', system-ui, -apple-system, sans-serif;
+      background: radial-gradient(ellipse at 50% 20%, #0d1230 0%, #070a14 65%);
+      min-height: 100vh;
+      color: var(--text);
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 28px 24px 64px;
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background:
+        radial-gradient(ellipse at 20% 70%, rgba(60,40,180,0.05) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(20,80,200,0.06) 0%, transparent 50%);
+      pointer-events: none;
+    }
+
+    .app {
+      width: 100%;
+      max-width: 640px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* ── Header — two rows ───────────────────────────────────────── */
+    .app-header {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    /* Row 1: title + action buttons */
+    .header-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .app-title {
+      font-family: 'Bebas Neue', system-ui, sans-serif;
+      font-size: 28px;
+      font-weight: 400;
+      letter-spacing: 3px;
+      color: var(--text-h);
+      line-height: 1;
+    }
+
+    .hud-actions {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .btn {
+      font-family: 'Outfit', sans-serif;
+      font-size: 13px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.03);
+      color: var(--text);
+      padding: 7px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+      line-height: 1;
+    }
+
+    .btn-ghost { background: transparent; }
+
+    .btn-primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #0d0a04;
+      font-weight: 600;
+    }
+
+    .undo-charges {
+      display: inline-block;
+      margin-left: 3px;
+      padding: 1px 5px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.10);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    /* Row 2: stat cards */
+    .header-stats {
+      display: flex;
+      gap: 6px;
+      align-items: stretch;
+    }
+
+    /* Base stat card */
+    .stat {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      flex: 0 0 auto;
+      min-width: 0;
+    }
+
+    .stat-label {
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text-dim);
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .stat-value {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-h);
+      font-variant-numeric: tabular-nums;
+      line-height: 1.1;
+    }
+
+    /* Level — glass amber */
+    .stat-level {
+      background: rgba(240,160,48,0.08);
+      border-color: rgba(240,160,48,0.28);
+    }
+    .stat-level .stat-value {
+      font-family: 'Bebas Neue', system-ui, sans-serif;
+      font-weight: 400;
+      font-size: 24px;
+      color: var(--accent);
+      line-height: 1;
+    }
+
+    /* Target with progress bar */
+    .stat-target { width: 72px; }
+    .stat-progress {
+      height: 5px;
+      background: rgba(255,255,255,0.06);
+      border-radius: 3px;
+      margin-top: 2px;
+      overflow: hidden;
+    }
+    .stat-progress-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 3px;
+      box-shadow: 0 0 6px rgba(240,160,48,0.6);
+    }
+
+    /* ── Floor stat — the centrepiece for Rising Floor mode ──────── */
+    .stat-floor {
+      flex: 1 1 auto;
+      min-width: 100px;
+      max-width: 148px;
+      background: rgba(240,160,48,0.05);
+      border-color: rgba(240,160,48,0.18);
+      gap: 3px;
+    }
+
+    .floor-body {
+      display: flex;
+      align-items: baseline;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .floor-value {
+      font-family: 'Bebas Neue', system-ui, sans-serif;
+      font-weight: 400;
+      font-size: 24px;
+      color: rgba(240,160,48,0.6);
+      line-height: 1;
+    }
+
+    .floor-countdown {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-dim);
+      white-space: nowrap;
+    }
+
+    /* Timer bar: fills from right-to-left as moves count down */
+    .floor-timer {
+      height: 3px;
+      background: rgba(255,255,255,0.05);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-top: 2px;
+    }
+    .floor-timer-fill {
+      height: 100%;
+      border-radius: 2px;
+      background: rgba(240,160,48,0.4);
+      transition: width 300ms ease-out;
+    }
+
+    /* — Warning state (≤3 moves) — */
+    .stat-floor-warn {
+      background: rgba(245,165,36,0.10);
+      border-color: rgba(245,165,36,0.45);
+    }
+    .stat-floor-warn .stat-label { color: rgba(245,165,36,0.6); }
+    .stat-floor-warn .floor-value { color: #f5a524; }
+    .stat-floor-warn .floor-countdown { color: #f5a524; }
+    .stat-floor-warn .floor-timer-fill {
+      background: #f5a524;
+      box-shadow: 0 0 6px rgba(245,165,36,0.7);
+    }
+
+    /* — Critical state (≤1 move) — */
+    .stat-floor-critical {
+      background: rgba(248,113,113,0.12);
+      border-color: rgba(248,113,113,0.6);
+      animation: floor-pulse 1s ease-in-out infinite;
+    }
+    .stat-floor-critical .stat-label { color: rgba(248,113,113,0.7); }
+    .stat-floor-critical .floor-value { color: #f87171; }
+    .stat-floor-critical .floor-countdown { color: #f87171; }
+    .stat-floor-critical .floor-timer-fill {
+      background: #f87171;
+      box-shadow: 0 0 8px rgba(248,113,113,0.8);
+    }
+    @keyframes floor-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(248,113,113,0); }
+      50%       { box-shadow: 0 0 0 3px rgba(248,113,113,0.3); }
+    }
+
+    /* Pairs — green */
+    .stat-pairs .stat-value { color: #52d87a; }
+
+    /* Moves */
+    .stat-moves { min-width: 62px; }
+
+    /* ── Play area ───────────────────────────────────────────────── */
+    .play-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 12px 16px;
+    }
+
+    /* ── Spawn queue ─────────────────────────────────────────────── */
+    .spawn-queue {
+      display: grid;
+      grid-template-columns: repeat(5, 64px);
+      gap: 8px;
+      padding: 2px 8px;
+    }
+
+    .spawn-column {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      align-items: stretch;
+    }
+
+    .spawn-chip {
+      height: 22px;
+      border-radius: 11px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: 'Outfit', sans-serif;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .spawn-chip-next {
+      box-shadow:
+        0 0 0 1.5px rgba(184,202,232,0.45),
+        0 0 8px rgba(184,202,232,0.18);
+    }
+
+    /* ── Tile value classes ──────────────────────────────────────── */
+    .v-2   { background: #111a38; color: #6090e0; }
+    .v-4   { background: #0c1f34; color: #38c8e8; }
+    .v-8   { background: #0c2220; color: #30e090; }
+    .v-16  { background: #1f2308; color: #c0d820; }
+    .v-32  { background: #261a06; color: #f0b020; }
+    .v-64  { background: #281406; color: #f06820; }
+    .v-128 { background: #280810; color: #f03858; }
+    .v-256 { background: #220a26; color: #d840d8; }
+    .v-512 { background: #10082e; color: #9050f8; }
+
+    /* ── Board ───────────────────────────────────────────────────── */
+    .board-wrap { position: relative; }
+
+    .board {
+      display: grid;
+      grid-template-columns: repeat(5, 64px);
+      grid-template-rows: repeat(7, 64px);
+      gap: 8px;
+      padding: 12px;
+      background: var(--bg-board);
+      border-radius: 10px;
+      box-shadow:
+        0 0 60px rgba(80,100,200,0.09),
+        0 2px 40px rgba(0,0,0,0.6);
+    }
+
+    .cell {
+      width: 64px;
+      height: 64px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      background: rgba(255,255,255,0.07);
+    }
+
+    .cell:not(.cell-empty) {
+      box-shadow: inset 0 -2px 0 rgba(0,0,0,0.28);
+    }
+
+    .tile-num {
+      font-family: 'Bebas Neue', system-ui, sans-serif;
+      font-weight: 400;
+      font-size: 32px;
+      line-height: 1;
+      letter-spacing: 0.5px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .tile-num.sm { font-size: 28px; }
+
+    .chain-idx {
+      position: absolute;
+      bottom: 3px;
+      right: 5px;
+      font-size: 10px;
+      font-weight: 600;
+      opacity: 0.75;
+      font-family: 'Outfit', sans-serif;
+      color: inherit;
+    }
+
+    /* Selected */
+    .tile-selected {
+      outline: 3px solid rgba(240,160,48,0.88);
+      outline-offset: -3px;
+    }
+    .tile-selected::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: rgba(240,160,48,0.10);
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    /* Trophy */
+    .tile-trophy {
+      animation: trophy-pulse 2.4s ease-in-out infinite;
+    }
+    @keyframes trophy-pulse {
+      0%, 100% {
+        box-shadow: inset 0 -2px 0 rgba(0,0,0,0.2), 0 0 0 2px rgba(255,215,90,0.80), 0 0 18px rgba(255,215,90,0.5);
+      }
+      50% {
+        box-shadow: inset 0 -2px 0 rgba(0,0,0,0.2), 0 0 0 3px rgba(255,215,90,1), 0 0 32px rgba(255,215,90,0.85);
+      }
+    }
+
+    /* Fragile — tiles below next floor, pulsing amber outline */
+    .tile-fragile {
+      animation: fragile-pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes fragile-pulse {
+      0%, 100% { box-shadow: inset 0 -2px 0 rgba(0,0,0,0.2), inset 0 0 0 2px rgba(245,165,36,0.3); }
+      50%       { box-shadow: inset 0 -2px 0 rgba(0,0,0,0.2), inset 0 0 0 2.5px rgba(245,165,36,0.75); }
+    }
+
+    /* Dead */
+    .tile-dead {
+      opacity: 0.35;
+      filter: saturate(0.3);
+    }
+
+    /* Chain overlay */
+    .chain-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* Hint */
+    .hint {
+      font-size: 11px;
+      color: var(--text-dim);
+      text-align: center;
+      max-width: 500px;
+      opacity: 0.75;
+      line-height: 1.55;
+    }
+    .hint em {
+      color: var(--text);
+      font-style: normal;
+      font-weight: 600;
+    }
+
+    /* ── State comparison legend ─────────────────────────────────── */
+    .legend {
+      width: 100%;
+      margin-top: 12px;
+      padding: 16px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .legend-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+    }
+    .legend-row {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+    .legend-label {
+      font-size: 11px;
+      color: var(--text-dim);
+      width: 72px;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+    }
+
+    /* ── Mockup label ────────────────────────────────────────────── */
+    .mockup-label {
+      position: fixed;
+      bottom: 16px;
+      right: 20px;
+      font-size: 10px;
+      color: var(--text-dim);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      opacity: 0.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+
+    <!-- ── Header (two rows) ───────────────────────────────────── -->
+    <header class="app-header">
+
+      <!-- Row 1: title + action buttons -->
+      <div class="header-top">
+        <h1 class="app-title">2248</h1>
+        <div class="hud-actions">
+          <button class="btn btn-ghost">← Menu</button>
+          <button class="btn btn-ghost">↶ Undo <span class="undo-charges">3</span></button>
+          <button class="btn btn-primary">New run</button>
+        </div>
+      </div>
+
+      <!-- Row 2: stat cards (Rising Floor — warning state: 3 moves left) -->
+      <div class="header-stats">
+
+        <!-- Level -->
+        <div class="stat stat-level">
+          <div class="stat-label">Level</div>
+          <div class="stat-value">2</div>
+        </div>
+
+        <!-- Target -->
+        <div class="stat stat-target">
+          <div class="stat-label">Target</div>
+          <div class="stat-value">512</div>
+          <div class="stat-progress">
+            <div class="stat-progress-fill" style="width:25%"></div>
+          </div>
+        </div>
+
+        <!-- Floor indicator — warning state (3 moves left) -->
+        <div class="stat stat-floor stat-floor-warn">
+          <div class="stat-label">Floor</div>
+          <div class="floor-body">
+            <span class="floor-value">4</span>
+            <span class="floor-countdown">↑ in 3</span>
+          </div>
+          <div class="floor-timer">
+            <!-- 3/10 moves remaining = 30% of bar -->
+            <div class="floor-timer-fill" style="width:30%"></div>
+          </div>
+        </div>
+
+        <!-- Moves -->
+        <div class="stat stat-moves">
+          <div class="stat-label">Moves</div>
+          <div class="stat-value">47</div>
+        </div>
+
+        <!-- Pairs — green (healthy board) -->
+        <div class="stat stat-pairs">
+          <div class="stat-label">Pairs</div>
+          <div class="stat-value">12</div>
+        </div>
+
+      </div>
+    </header>
+
+    <!-- ── Play area ────────────────────────────────────────────── -->
+    <div class="play-area">
+
+      <!-- Spawn queue -->
+      <div class="spawn-queue">
+        <div class="spawn-column">
+          <div class="spawn-chip v-4" style="opacity:0.38">4</div>
+          <div class="spawn-chip v-8" style="opacity:0.68">8</div>
+          <div class="spawn-chip v-4 spawn-chip-next">4</div>
+        </div>
+        <div class="spawn-column">
+          <div class="spawn-chip v-4" style="opacity:0.38">4</div>
+          <div class="spawn-chip v-8" style="opacity:0.68">8</div>
+          <div class="spawn-chip v-4 spawn-chip-next">4</div>
+        </div>
+        <div class="spawn-column">
+          <div class="spawn-chip v-4" style="opacity:0.38">4</div>
+          <div class="spawn-chip v-8" style="opacity:0.68">8</div>
+          <div class="spawn-chip v-8 spawn-chip-next">8</div>
+        </div>
+        <div class="spawn-column">
+          <div class="spawn-chip v-8" style="opacity:0.38">8</div>
+          <div class="spawn-chip v-4" style="opacity:0.68">4</div>
+          <div class="spawn-chip v-8 spawn-chip-next">8</div>
+        </div>
+        <div class="spawn-column">
+          <div class="spawn-chip v-4" style="opacity:0.38">4</div>
+          <div class="spawn-chip v-8" style="opacity:0.68">8</div>
+          <div class="spawn-chip v-4 spawn-chip-next">4</div>
+        </div>
+      </div>
+
+      <!-- Note: In Rising Floor mode the spawn queue only shows floor-4+ tiles -->
+
+      <!-- Board + chain SVG -->
+      <div class="board-wrap">
+        <div class="board">
+
+          <!-- Row 0: 4  32  16  8   4 — floor=4, so 2s/4s are fragile here if floor were rising higher,
+               but floor=4 means all tiles ≥4 are fine. Using realistic Rising Floor board (min val=4) -->
+          <div class="cell v-4" ><span class="tile-num">4</span></div>
+          <div class="cell v-32"><span class="tile-num">32</span></div>
+          <div class="cell v-16"><span class="tile-num">16</span></div>
+          <div class="cell v-8" ><span class="tile-num">8</span></div>
+          <div class="cell v-4" ><span class="tile-num">4</span></div>
+
+          <!-- Row 1: 8  [128 TROPHY]  4  32  16 -->
+          <div class="cell v-8"  ><span class="tile-num">8</span></div>
+          <div class="cell v-128 tile-trophy"><span class="tile-num sm">128</span></div>
+          <div class="cell v-4"  ><span class="tile-num">4</span></div>
+          <div class="cell v-32" ><span class="tile-num">32</span></div>
+          <div class="cell v-16" ><span class="tile-num">16</span></div>
+
+          <!-- Row 2: 4  8  [32 SEL#1]  4  8 -->
+          <div class="cell v-4"><span class="tile-num">4</span></div>
+          <div class="cell v-8"><span class="tile-num">8</span></div>
+          <div class="cell v-32 tile-selected">
+            <span class="tile-num">32</span>
+            <span class="chain-idx">1</span>
+          </div>
+          <div class="cell v-4"><span class="tile-num">4</span></div>
+          <div class="cell v-8"><span class="tile-num">8</span></div>
+
+          <!-- Row 3: 16  4  [32 SEL#2]  [64 SEL#3]  4 -->
+          <div class="cell v-16"><span class="tile-num">16</span></div>
+          <div class="cell v-4" ><span class="tile-num">4</span></div>
+          <div class="cell v-32 tile-selected">
+            <span class="tile-num">32</span>
+            <span class="chain-idx">2</span>
+          </div>
+          <div class="cell v-64 tile-selected">
+            <span class="tile-num">64</span>
+            <span class="chain-idx">3</span>
+          </div>
+          <div class="cell v-4"><span class="tile-num">4</span></div>
+
+          <!-- Row 4: 4  32  8  4  32 -->
+          <div class="cell v-4" ><span class="tile-num">4</span></div>
+          <div class="cell v-32"><span class="tile-num">32</span></div>
+          <div class="cell v-8" ><span class="tile-num">8</span></div>
+          <div class="cell v-4" ><span class="tile-num">4</span></div>
+          <div class="cell v-32"><span class="tile-num">32</span></div>
+
+          <!-- Row 5: 4  8  16  4  16 — these 4s are FRAGILE (floor is about to rise to 8) -->
+          <div class="cell v-4 tile-fragile" ><span class="tile-num">4</span></div>
+          <div class="cell v-8"              ><span class="tile-num">8</span></div>
+          <div class="cell v-16"             ><span class="tile-num">16</span></div>
+          <div class="cell v-4 tile-fragile" ><span class="tile-num">4</span></div>
+          <div class="cell v-16"             ><span class="tile-num">16</span></div>
+
+          <!-- Row 6: 32  4  8  4  8 — 4s are FRAGILE -->
+          <div class="cell v-32"             ><span class="tile-num">32</span></div>
+          <div class="cell v-4 tile-fragile" ><span class="tile-num">4</span></div>
+          <div class="cell v-8"              ><span class="tile-num">8</span></div>
+          <div class="cell v-4 tile-fragile" ><span class="tile-num">4</span></div>
+          <div class="cell v-8"              ><span class="tile-num">8</span></div>
+
+        </div>
+
+        <!--
+          Cell centers: x = 44 + col*72,  y = 44 + row*72
+          (2,2): 188,188  (3,2): 188,260  (3,3): 260,260
+        -->
+        <svg class="chain-overlay" width="376" height="520" viewBox="0 0 376 520">
+          <defs>
+            <filter id="glow-line" x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="3.5" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <filter id="glow-dot" x="-100%" y="-100%" width="300%" height="300%">
+              <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+              <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+          </defs>
+          <!-- Amber glow underlayer -->
+          <polyline points="188,188 188,260 260,260" fill="none"
+            stroke="rgba(240,160,48,0.28)" stroke-width="9"
+            stroke-linecap="round" stroke-linejoin="round"/>
+          <!-- White line with glow -->
+          <polyline points="188,188 188,260 260,260" fill="none"
+            stroke="rgba(255,255,255,0.70)" stroke-width="2.5"
+            stroke-linecap="round" stroke-linejoin="round"
+            filter="url(#glow-line)"/>
+          <!-- Vertex dots -->
+          <circle cx="188" cy="188" r="5" fill="rgba(255,255,255,0.90)" filter="url(#glow-dot)"/>
+          <circle cx="188" cy="260" r="5" fill="rgba(255,255,255,0.90)" filter="url(#glow-dot)"/>
+          <!-- End dot — amber, the "double" destination -->
+          <circle cx="260" cy="260" r="7" fill="rgba(240,160,48,0.95)" filter="url(#glow-dot)"/>
+          <circle cx="260" cy="260" r="15" fill="none" stroke="rgba(240,160,48,0.3)" stroke-width="1.5"/>
+        </svg>
+      </div>
+
+    </div>
+
+    <!-- Hint -->
+    <p class="hint">
+      Start a chain with <em>two equal tiles</em>. After that, each next tile must
+      <em>equal or double</em> the previous. Game over when no equal adjacent tiles remain.
+    </p>
+
+    <!-- ── Floor indicator state comparison ─────────────────────── -->
+    <div class="legend">
+      <div class="legend-title">Floor indicator — urgency states</div>
+      <div class="legend-row">
+        <span class="legend-label">Normal</span>
+        <div class="stat stat-floor" style="flex:none">
+          <div class="stat-label">Floor</div>
+          <div class="floor-body">
+            <span class="floor-value">4</span>
+            <span class="floor-countdown">↑ in 8</span>
+          </div>
+          <div class="floor-timer">
+            <div class="floor-timer-fill" style="width:80%"></div>
+          </div>
+        </div>
+      </div>
+      <div class="legend-row">
+        <span class="legend-label">Warning</span>
+        <div class="stat stat-floor stat-floor-warn" style="flex:none">
+          <div class="stat-label">Floor</div>
+          <div class="floor-body">
+            <span class="floor-value">4</span>
+            <span class="floor-countdown">↑ in 3</span>
+          </div>
+          <div class="floor-timer">
+            <div class="floor-timer-fill" style="width:30%"></div>
+          </div>
+        </div>
+      </div>
+      <div class="legend-row">
+        <span class="legend-label">Critical</span>
+        <div class="stat stat-floor stat-floor-critical" style="flex:none">
+          <div class="stat-label">Floor</div>
+          <div class="floor-body">
+            <span class="floor-value">4</span>
+            <span class="floor-countdown">↑ next move!</span>
+          </div>
+          <div class="floor-timer">
+            <div class="floor-timer-fill" style="width:10%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="mockup-label">Rising Floor · Deep Crystal</div>
+</body>
+</html>
