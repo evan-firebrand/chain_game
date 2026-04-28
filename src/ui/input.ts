@@ -5,6 +5,8 @@ export interface InputCallbacks {
   onChainUpdate: (chain: ReadonlyArray<Cell>) => void;
   onChainCommit: (chain: ReadonlyArray<Cell>) => void;
   onChainCancel: () => void;
+  /** Return true if appending `cell` to `chain` would be a legal move. */
+  canExtend: (chain: ReadonlyArray<Cell>, cell: Cell) => boolean;
 }
 
 function isAdjacent(a: Cell, b: Cell): boolean {
@@ -60,8 +62,9 @@ export function attachInput(
       return;
     }
 
-    // Only extend if new cell is adjacent to the chain end
+    // Only extend if adjacent AND the game rules allow it
     if (last !== undefined && !isAdjacent(last, cell)) return;
+    if (!callbacks.canExtend(chain, cell)) return;
 
     chain = [...chain, cell];
     callbacks.onChainUpdate(chain);

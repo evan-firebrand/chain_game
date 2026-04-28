@@ -16,22 +16,29 @@ export function boardPixelHeight(rows: number): number {
   return rows * TILE + (rows - 1) * GAP;
 }
 
+// Nearest-center hit detection: always returns the tile whose center is closest.
+// This makes diagonal movement reliable — gaps are never "dead zones."
 export function pixelToCell(
   x: number,
   y: number,
   rows: number,
   cols: number,
 ): Cell | null {
+  if (rows === 0 || cols === 0) return null;
+  let best: Cell | null = null;
+  let bestDist = Infinity;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const tx = tileOffset(c);
-      const ty = tileOffset(r);
-      if (x >= tx && x < tx + TILE && y >= ty && y < ty + TILE) {
-        return { row: r as Cell['row'], col: c as Cell['col'] };
+      const cx = tileOffset(c) + TILE / 2;
+      const cy = tileOffset(r) + TILE / 2;
+      const dist = (x - cx) * (x - cx) + (y - cy) * (y - cy);
+      if (dist < bestDist) {
+        bestDist = dist;
+        best = { row: r as Cell['row'], col: c as Cell['col'] };
       }
     }
   }
-  return null;
+  return best;
 }
 
 // Hue wheel: low values → cool blues, higher → warm reds/golds

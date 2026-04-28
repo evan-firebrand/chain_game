@@ -176,6 +176,10 @@ function mount(): void {
 
   function makeInputCallbacks() {
     return {
+      canExtend(chain: ReadonlyArray<Cell>, cell: Cell): boolean {
+        const state = session.getState();
+        return validateChain(state.board, [...chain, cell]).valid;
+      },
       onChainUpdate(chain: ReadonlyArray<Cell>) {
         currentChain = chain;
         previewValue = null;
