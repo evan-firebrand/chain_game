@@ -22,7 +22,8 @@ let violations = 0;
 
 for (const section of sections) {
   const filePath = section.split('\n')[0].trim();
-  if (!filePath.includes('src/game-kernel/') || filePath.includes('index.ts')) continue;
+  const normalizedPath = filePath.replace(/\\/g, '/');
+  if (!normalizedPath.includes('src/game-kernel/') || normalizedPath.includes('index.ts')) continue;
 
   const linesFound = parseInt(section.match(/LF:(\d+)/)?.[1] ?? '0', 10);
   const linesHit = parseInt(section.match(/LH:(\d+)/)?.[1] ?? '0', 10);

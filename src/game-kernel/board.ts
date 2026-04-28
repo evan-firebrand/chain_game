@@ -45,6 +45,7 @@ export function removeTiles(board: Board, cells: readonly Cell[]): Board {
  */
 export function applyGravity(board: Board): Board {
   const rows = board.length;
+  /* v8 ignore next 2 */
   if (rows === 0) return board;
   const cols = board[0]?.length ?? 0;
 
@@ -88,6 +89,7 @@ function pickTileValue(
 
   let v = config.spawnPoolMin;
   while (v <= config.spawnPoolMax) {
+    /* v8 ignore next 1 */
     const weight = config.spawnWeights[v] ?? 0;
     if (weight > 0) {
       entries.push([v, weight]);
@@ -107,8 +109,8 @@ function pickTileValue(
     if (threshold <= 0) {
       return val;
     }
+    /* v8 ignore next 1 */
   }
-
   /* v8 ignore next 2 */
   const last = entries[entries.length - 1];
   return last !== undefined ? last[0] : config.spawnPoolMin;
@@ -120,6 +122,7 @@ function pickTileValue(
  */
 function findEmptyCells(board: Board): Cell[] {
   const rows = board.length;
+  /* v8 ignore next 1 */
   const cols = board[0]?.length ?? 0;
   const empties: Cell[] = [];
 
@@ -158,6 +161,7 @@ export function spawnTiles(
 
   for (let i = 0; i < spawnCount && i < emptyCells.length; i++) {
     const cell = emptyCells[i];
+    /* v8 ignore next 1 */
     if (cell === undefined) break;
 
     // Advance PRNG

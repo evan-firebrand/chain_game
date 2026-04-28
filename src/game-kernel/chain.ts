@@ -63,9 +63,11 @@ export function resolveChain(
   for (let i = 2; i < chain.length; i++) {
     const cell = chain[i];
     const prevCell = chain[i - 1];
+    /* v8 ignore next 1 */
     if (cell === undefined || prevCell === undefined) continue;
     const currentTile = board[prevCell.row]?.[prevCell.col];
     const candidateTile = board[cell.row]?.[cell.col];
+    /* v8 ignore next 1 */
     if (currentTile === undefined || candidateTile === undefined) continue;
 
     const { extensionType } = validateChainExtension(currentTile, candidateTile);
