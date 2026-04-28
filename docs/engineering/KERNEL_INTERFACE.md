@@ -299,9 +299,9 @@ These were open design gaps, now resolved:
 | Post-chain spawn count | **L−1 new tiles** spawn from the top (chain removes L tiles, 1 result placed back → L−1 needed to refill completely) |
 | L=1 chain spawn count | **Moot** — minimum chain is 2, so L≥2 always; minimum spawn = 1 |
 
-## Remaining Open Questions (file as design-question issues before Phase 1 gate)
+## All Design Gaps Resolved — Phase 1 May Begin
 
-| Question | Conservative default to use if blocked |
+| Question | Answer |
 |---|---|
-| Gravity: when multiple columns drop simultaneously, is order defined? | Left-to-right (cosmetic only; game correctness unaffected) |
-| Can the player's traced path revisit the same column (but not the same cell)? | Yes — only cell reuse is forbidden, not column reuse |
+| Gravity column drop order | Cosmetic — left-to-right default, no gameplay impact (confirmed Evan 2026-04-28) |
+| Can path revisit a column/row? | Yes — only the specific cell is locked once used (confirmed Evan 2026-04-28) |

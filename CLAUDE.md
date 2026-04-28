@@ -8,7 +8,7 @@
 
 Chain Game is a browser-based 2D number-merging puzzle game with a path-chain mechanic; the design is complete and the engineering team is now building it in phases, starting with the pure game-logic kernel.
 
-**Current phase:** Phase 0 (Foundation) — contracts and scaffolding. No game logic is implemented yet.
+**Current phase:** Phase 1 (game-kernel) — implementing the pure logic module. Game Logic Agent and Test Agent are active in parallel.
 
 ---
 
@@ -152,25 +152,23 @@ When you hit an ambiguity not covered by the spec:
 3. If blocked and Evan is unavailable: implement the most conservative option (closest to what the spec already says) and add a `// TODO(design-question: #NNN)` comment.
 4. When Evan answers: update the code, file an ADR if the decision affects module boundaries or APIs.
 
-**Known gaps agents will encounter:**
-- `[2,2]` chain of length 1 after a retirement — chain-start still valid?
-- L−1 spawn when L=1 — does that mean 0 spawns, or a minimum of 1?
-- "Last position" in a chain that revisits a column — which cell is "last"?
-- Gravity: when multiple columns drop simultaneously, is order defined?
+**All Phase 1 design gaps are resolved.** No open questions remain before kernel implementation.
 
 ---
 
 ## Current Phase and Gate Status
 
-**Phase 0 — Project Foundation**
+**Phase 0 — Project Foundation** ✅ COMPLETE
 
-Gate criteria (all must pass before Phase 1 begins):
-- [ ] `CLAUDE.md` merged to `main`, Evan-approved
-- [ ] `KERNEL_INTERFACE.md` merged to `main`, Evan-approved
-- [ ] Folder skeleton exists (empty dirs + README stubs, no logic)
-- [ ] CI passing on scaffolded repo
+**Phase 1 — game-kernel** 🟡 IN PROGRESS
 
-**Phase 1 — game-kernel** (next phase, not started)
+Gate criteria (all must pass before Phase 2 begins):
+- [ ] All T1-T8b test vectors pass
+- [ ] 100% line/function/branch coverage on `src/game-kernel/`
+- [ ] Property test: any valid chain always returns a power-of-2
+- [ ] Evan reads kernel source and confirms it matches spec
+- [ ] 1000 random games run with zero crashes
+- [ ] Zero imports outside `src/game-kernel/`
 
 See `docs/engineering/ARCHITECTURE.md` for full phase sequence.
 
