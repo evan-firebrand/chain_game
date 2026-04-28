@@ -174,13 +174,18 @@ When you hit an ambiguity not covered by the spec:
 - Game-over detection and restart work
 - Zero game logic in UI layer (CI boundary check passes)
 
-**Phase 3 — Tuning Console** 🟡 NEXT
+**Phase 3 — Tuning Console** 🟢 IN PROGRESS (branch `feat/phase3-tuning-console`)
 
-Gate criteria (all must pass before Phase 4 begins):
-- [ ] All Tier 1 parameters exposed (k, spawn weights per tier)
-- [ ] Changing k mid-game produces correct results on next chain
-- [ ] Config exportable as JSON
+Gate criteria (last box waits on Evan UAT):
+- [x] All Tier 1 parameters exposed (k, spawn weights per tier)
+- [x] Changing k mid-game produces correct results on next chain (verified by `tests/game-session/session-update-config.test.ts`)
+- [x] Config exportable as JSON (`src/tuning-console/config-export.ts` + 17 tests)
 - [ ] Evan uses it in a real play session
+
+Phase 3 also delivered:
+- `docs/engineering/PARAMETER_TIERS.md` (Evan approval pending)
+- ADR 0002 — `GameSession.updateConfig` Tier 1/2 contract (Evan approval pending)
+- Backfilled `tests/game-session/` Phase 2 deferred suite (18 tests, 100% coverage)
 
 See `docs/engineering/ARCHITECTURE.md` for full phase sequence.
 
@@ -192,6 +197,7 @@ See `docs/engineering/ARCHITECTURE.md` for full phase sequence.
 |---|---|---|---|
 | 0000 | Tech Stack | Accepted | 2026-04-28 |
 | 0001 | Pure Kernel Module | Accepted | 2026-04-28 |
+| 0002 | GameSession.updateConfig contract | PROPOSED (Evan approval pending) | 2026-04-28 |
 
 ---
 
