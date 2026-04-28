@@ -86,7 +86,7 @@ function expectTileValue(obj: Record<string, unknown>, field: string): TileValue
       field
     );
   }
-  return v as TileValue;
+  return v;
 }
 
 function expectSpawnWeights(
@@ -114,7 +114,7 @@ function expectSpawnWeights(
   }
   // Extras outside [min, max] are allowed (preserved if numeric and >= 0).
   for (const [k, w] of Object.entries(weights)) {
-    const tv = Number(k) as TileValue;
+    const tv = Number(k);
     if (!isPlayableTileValue(tv)) continue;
     if (tv < min || tv > max) {
       if (typeof w === 'number' && Number.isFinite(w) && w >= 0) {

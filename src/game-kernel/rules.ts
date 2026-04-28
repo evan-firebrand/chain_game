@@ -18,5 +18,5 @@ export function computeResultValue(
 ): TileValue {
   const bonus = Math.floor(sameExtensions / config.ruleK);
   const result = lastValue * 2 * Math.pow(2, bonus);
-  return result as TileValue;
+  return result;
 }

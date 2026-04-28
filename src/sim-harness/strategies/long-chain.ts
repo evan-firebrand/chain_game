@@ -61,7 +61,10 @@ function greedyWalkCandidate(state: GameState): CandidateChain | undefined {
     .sort((a, b) => {
       if (a.resultValue !== b.resultValue) return b.resultValue - a.resultValue;
       if (a.chain.length !== b.chain.length) return b.chain.length - a.chain.length;
-      return compareCell(a.chain[0]!, b.chain[0]!);
+      const left = a.chain[0];
+      const right = b.chain[0];
+      if (left === undefined || right === undefined) return 0;
+      return compareCell(left, right);
     })[0];
 }
 
@@ -214,7 +217,7 @@ export const strategicHumanLikeStrategy: SimStrategy = {
 
     if (isNearMilestone(state)) {
       const cleanup = cleanupCandidate(state, 4);
-      if (cleanup !== undefined && cleanup.chain.some(cell => state.board[cell.row]?.[cell.col]?.value === soonToRetireValue(state))) {
+      if (cleanup?.chain.some(cell => state.board[cell.row]?.[cell.col]?.value === soonToRetireValue(state))) {
         return toDecision(cleanup, 'cleanup', 'pre-milestone-cleanup', 'cleanup');
       }
       return toDecision(milestoneCandidate(state), 'milestone', 'controlled-threshold-push', 'milestone');

@@ -5,8 +5,8 @@ import type { Board, Cell, Tile, TileValue, GameConfig } from '../../src/game-ke
 const ROWS = 7;
 const COLS = 6;
 
-function makeTile(value: number, retired = false): Tile {
-  return { value: value as TileValue, retired };
+function makeTile(value: TileValue, retired = false): Tile {
+  return { value, retired };
 }
 
 function emptyTile(): Tile {

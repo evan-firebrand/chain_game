@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createGame, DEFAULT_CONFIG, setTile, validateChain } from '../../src/game-kernel/index.js';
-import type { Board, Cell, TileValue } from '../../src/game-kernel/index.js';
+import type { Board, Cell, GameState, TileValue } from '../../src/game-kernel/index.js';
 import {
   countLegalChainStarts,
   enumerateCandidateChains,
@@ -32,7 +32,7 @@ function emptyBoard(rows: number, cols: number): Board {
   ) as Board;
 }
 
-function longPathState() {
+function longPathState(): GameState {
   let board = emptyBoard(4, 6);
   const values = [
     2, 2, 2, 2, 4, 4,

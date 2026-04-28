@@ -19,7 +19,7 @@ export function nextTileValue(value: TileValue): TileValue | null {
 
 export function previousTileValue(value: TileValue): TileValue | null {
   if (!isPlayableTileValue(value) || value <= MIN_TILE_VALUE) return null;
-  return (value / 2) as TileValue;
+  return value / 2;
 }
 
 export function tileValueStepsBelow(value: TileValue, steps: number): TileValue | null {
