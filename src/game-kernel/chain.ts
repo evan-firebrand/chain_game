@@ -42,7 +42,7 @@ export function validateChainExtension(
  * Given an ordered chain of cells, resolves the chain result.
  * Returns { resultValue, sameExtensions, doublingExtensions }.
  *
- * sameExtensions: number of extensions (index >= 2) where extensionType === 'same'
+ * sameExtensions: number of extensions (beyond initial pair, index >= 2) where extensionType === 'same'
  * doublingExtensions: extensions where extensionType === 'double'
  * resultValue: computeResultValue(lastTile.value, sameExtensions, config)
  */
@@ -54,7 +54,12 @@ export function resolveChain(
   let sameExtensions = 0;
   let doublingExtensions = 0;
 
-  // Extensions counted from index 2 onward (pair at 0,1 is chain start)
+  // Extensions start from index 1 (each tile after the first).
+  // But per spec: "same-value extensions beyond the initial pair" — the pair itself (index 0→1)
+  // is the chain start (same-value required). Extensions beyond that start at index 2.
+  // However, we also need to track: index 1 tile establishes the "pair" but isn't an "extension".
+  // Extensions counted from index 2 onward.
+
   for (let i = 2; i < chain.length; i++) {
     const cell = chain[i];
     const prevCell = chain[i - 1];

@@ -97,6 +97,7 @@ function pickTileValue(
   }
 
   if (totalWeight === 0 || entries.length === 0) {
+    // Fallback: return spawnPoolMin
     return config.spawnPoolMin;
   }
 
@@ -108,12 +109,14 @@ function pickTileValue(
     }
   }
 
+  // Fallback: last entry
   const last = entries[entries.length - 1];
   return last !== undefined ? last[0] : config.spawnPoolMin;
 }
 
 /**
  * Find empty cells starting from top of each column, left-to-right.
+ * Returns cells in order: col 0 top-to-bottom, then col 1, etc.
  */
 function findEmptyCells(board: Board): Cell[] {
   const rows = board.length;
@@ -156,6 +159,7 @@ export function spawnTiles(
     const cell = emptyCells[i];
     if (cell === undefined) break;
 
+    // Advance PRNG
     currentPrng = lcgNext(currentPrng);
     const rand = lcgFloat(currentPrng);
     const value = pickTileValue(config, rand);

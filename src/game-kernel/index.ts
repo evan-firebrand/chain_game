@@ -43,7 +43,7 @@ export { computeResultValue } from './rules.js';
 export { getAdjacentCells, validateChainExtension, resolveChain } from './chain.js';
 export { applyGravity, setTile, removeTiles, spawnTiles } from './board.js';
 
-// ─── LCG PRNG (for initial board fill) ───────────────────────────────────
+// ─── LCG PRNG (duplicated here for initial board fill) ───────────────────
 
 function lcgNext(state: number): number {
   return (Math.imul(1664525, state) + 1013904223) >>> 0;
@@ -125,6 +125,7 @@ function fillBoard(
 export function createGame(config: GameConfig): GameState {
   let prngState = config.prngSeed;
 
+  // Fill board, retry until at least one valid chain start exists
   let board: Board;
   let attempt = 0;
   do {
@@ -135,8 +136,9 @@ export function createGame(config: GameConfig): GameState {
 
     if (hasLegalChainStart(board)) break;
 
-    // After many retries, force a pair at top-left
+    // If no legal start after many attempts, force a pair
     if (attempt >= 100) {
+      // Force the first two cells to have the same value as the first cell
       const firstTile = board[0]?.[0];
       if (firstTile !== undefined && firstTile.value !== 0) {
         board = setTile(board, { row: 0 as Row, col: 1 as Col }, { value: firstTile.value, retired: false });
@@ -206,6 +208,7 @@ export function validateChain(
     return { valid: false, reason: 'Cell out of bounds' };
   }
 
+  // Check adjacency of first pair
   const adjacentToFirst = getAdjacentCells(first, rows, cols);
   const isFirstAdj = adjacentToFirst.some(c => c.row === second.row && c.col === second.col);
   if (!isFirstAdj) {
@@ -222,6 +225,7 @@ export function validateChain(
     const curr = chain[i];
     if (prev === undefined || curr === undefined) continue;
 
+    // Check adjacency
     const adjCells = getAdjacentCells(prev, rows, cols);
     const isAdj = adjCells.some(c => c.row === curr.row && c.col === curr.col);
     if (!isAdj) {
@@ -325,6 +329,7 @@ export function applyAction(state: GameState, action: Action): GameState {
       );
       board = boardAfterSpawn;
 
+      // Build chain-resolved event
       const chainResolvedEvent: ChainResolvedEvent = {
         kind: 'chain-resolved',
         chain,
@@ -335,6 +340,7 @@ export function applyAction(state: GameState, action: Action): GameState {
       };
       newEvents.push(chainResolvedEvent);
 
+      // Build tiles-spawned event
       if (spawned.length > 0) {
         const tilesSpawnedEvent: TilesSpawnedEvent = {
           kind: 'tiles-spawned',
@@ -343,13 +349,20 @@ export function applyAction(state: GameState, action: Action): GameState {
         newEvents.push(tilesSpawnedEvent);
       }
 
+      // Update maxTileEver
       const newMaxTileEver = (
         resultValue > state.maxTileEver ? resultValue : state.maxTileEver
       ) as TileValue;
 
-      // Retirement is a stub in Phase 1 — skip call to avoid throwing
-      const newSpawnPoolMin = state.spawnPoolMin;
-      const newSpawnPoolMax = state.spawnPoolMax;
+      // Check retirement (stub — always returns null in Phase 1)
+      // We call it inside a try/catch so the stub error doesn't break Phase 1
+      // Per spec: retirement is a stub, always returns null for now
+      // We skip the call entirely in Phase 1 to avoid throwing
+      const retirementFired = null; // checkRetirement would go here in Phase 4
+
+      // Determine new spawn pool (unchanged in Phase 1)
+      const newSpawnPoolMin = retirementFired !== null ? state.spawnPoolMin : state.spawnPoolMin;
+      const newSpawnPoolMax = retirementFired !== null ? state.spawnPoolMax : state.spawnPoolMax;
 
       // Check loss condition
       const legalStart = hasLegalChainStart(board);
