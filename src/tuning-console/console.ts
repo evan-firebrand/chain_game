@@ -16,6 +16,8 @@ export interface TuningConsoleOpts {
 export interface TuningConsoleHandle {
   destroy(): void;
   setConfig(config: GameConfig): void;
+  /** Re-bind the console to a new session (e.g. after a new-game restart). */
+  rebindSession(session: GameSession): void;
 }
 
 const STYLES = `
@@ -31,6 +33,12 @@ const STYLES = `
   font-size: 13px;
   display: none;
   flex-shrink: 0;
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 50;
+  box-shadow: -2px 0 12px rgba(0,0,0,0.5);
+  box-sizing: border-box;
 }
 body[data-console-open] .tc-panel {
   display: block;
@@ -158,6 +166,9 @@ function injectStyles(): void {
 export function mountTuningConsole(opts: TuningConsoleOpts): TuningConsoleHandle {
   injectStyles();
 
+  // Mutable session ref — rebound by rebindSession() after new-game restarts.
+  let activeSession: GameSession = opts.session;
+
   const panel = document.createElement('aside');
   panel.className = 'tc-panel';
 
@@ -184,7 +195,7 @@ export function mountTuningConsole(opts: TuningConsoleOpts): TuningConsoleHandle
   liveHeading.textContent = 'Live (Tier 1)';
   panel.appendChild(liveHeading);
 
-  const initialConfig = opts.session.getState().config;
+  const initialConfig = activeSession.getState().config;
 
   const ruleKSlider = makeSlider({
     id: 'tc-rulek',
@@ -194,7 +205,7 @@ export function mountTuningConsole(opts: TuningConsoleOpts): TuningConsoleHandle
     step: 1,
     value: initialConfig.ruleK,
   });
-  ruleKSlider.onChange(v => { opts.session.updateConfig({ ruleK: v }); });
+  ruleKSlider.onChange(v => { activeSession.updateConfig({ ruleK: v }); });
   panel.appendChild(ruleKSlider.element);
 
   const weightSliders = new Map<TileValue, SliderControl>();
@@ -223,7 +234,7 @@ export function mountTuningConsole(opts: TuningConsoleOpts): TuningConsoleHandle
       for (const tv of TIER1_WEIGHT_VALUES) {
         newWeights[tv] = weightSliders.get(tv)?.getValue() ?? 0;
       }
-      opts.session.updateConfig({ spawnWeights: newWeights });
+      activeSession.updateConfig({ spawnWeights: newWeights });
       refreshPercents(newWeights);
     });
     weightSliders.set(v, slider);
@@ -246,7 +257,7 @@ export function mountTuningConsole(opts: TuningConsoleOpts): TuningConsoleHandle
   refreshPercents(initialConfig.spawnWeights);
 
   const resetBtn = makeButton('Reset Tier 1 to defaults', () => {
-    opts.session.updateConfig({
+    activeSession.updateConfig({
       ruleK: DEFAULT_CONFIG.ruleK,
       spawnWeights: DEFAULT_CONFIG.spawnWeights,
     });
@@ -286,7 +297,7 @@ export function mountTuningConsole(opts: TuningConsoleOpts): TuningConsoleHandle
   advSection.appendChild(randomizeBtn);
 
   const newGameBtn = makeButton('New Game with these settings', () => {
-    const current = opts.session.getState().config;
+    const current = activeSession.getState().config;
     const cfg: GameConfig = {
       ...current,
       gridRows: gridRowsInput.getValue(),
@@ -331,7 +342,7 @@ export function mountTuningConsole(opts: TuningConsoleOpts): TuningConsoleHandle
   }
 
   const exportBtn = makeButton('Export', () => {
-    const json = exportConfig(opts.session.getState().config);
+    const json = exportConfig(activeSession.getState().config);
     textarea.value = json;
     textarea.classList.remove('tc-error');
     if (typeof navigator.clipboard !== 'undefined' && typeof navigator.clipboard.writeText === 'function') {
@@ -355,7 +366,7 @@ export function mountTuningConsole(opts: TuningConsoleOpts): TuningConsoleHandle
     }
     textarea.classList.remove('tc-error');
 
-    const current = opts.session.getState().config;
+    const current = activeSession.getState().config;
     const tier2Differs =
       parsed.gridRows !== current.gridRows ||
       parsed.gridCols !== current.gridCols ||
@@ -374,7 +385,7 @@ export function mountTuningConsole(opts: TuningConsoleOpts): TuningConsoleHandle
       opts.onRequestNewGame(parsed);
       setMessage('New game started with imported config.', 'success');
     } else {
-      opts.session.updateConfig({
+      activeSession.updateConfig({
         ruleK: parsed.ruleK,
         spawnWeights: parsed.spawnWeights,
       });
@@ -400,9 +411,14 @@ export function mountTuningConsole(opts: TuningConsoleOpts): TuningConsoleHandle
     textarea.classList.remove('tc-error');
   }
 
-  const unsubscribe = opts.session.on(ev => {
-    setConfig(ev.config);
-  });
+  let unsubscribe = activeSession.on(ev => { setConfig(ev.config); });
+
+  function rebindSession(next: GameSession): void {
+    unsubscribe();
+    activeSession = next;
+    unsubscribe = activeSession.on(ev => { setConfig(ev.config); });
+    setConfig(activeSession.getState().config);
+  }
 
   return {
     destroy(): void {
@@ -410,6 +426,7 @@ export function mountTuningConsole(opts: TuningConsoleOpts): TuningConsoleHandle
       panel.remove();
     },
     setConfig,
+    rebindSession,
   };
 }
 

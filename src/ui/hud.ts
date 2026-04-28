@@ -5,6 +5,7 @@ export interface HudElements {
   maxTile: HTMLElement;
   chainValue: HTMLElement;
   gameOver: HTMLElement;
+  tuningToggle: HTMLButtonElement;
 }
 
 export function createHud(container: HTMLElement): HudElements {
@@ -23,9 +24,16 @@ export function createHud(container: HTMLElement): HudElements {
   chainValueEl.className = 'hud-stat';
   chainValueEl.innerHTML = '<span class="hud-label">CHAIN</span><span class="hud-value" id="hud-chain">—</span>';
 
+  const tuningToggle = document.createElement('button');
+  tuningToggle.type = 'button';
+  tuningToggle.className = 'hud-tuning-toggle';
+  tuningToggle.setAttribute('aria-label', 'Toggle tuning panel');
+  tuningToggle.textContent = '⚙';
+
   topBar.appendChild(turnEl);
   topBar.appendChild(chainValueEl);
   topBar.appendChild(maxTileEl);
+  topBar.appendChild(tuningToggle);
   container.appendChild(topBar);
 
   const gameOverEl = document.createElement('div');
@@ -44,6 +52,7 @@ export function createHud(container: HTMLElement): HudElements {
     maxTile: document.getElementById('hud-max') as HTMLElement,
     chainValue: document.getElementById('hud-chain') as HTMLElement,
     gameOver: gameOverEl,
+    tuningToggle,
   };
 }
 

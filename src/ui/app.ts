@@ -6,7 +6,7 @@ import {
   validateChainExtension,
   GameSession,
 } from '../game-session/index.js';
-import type { Cell, TileValue } from '../game-session/index.js';
+import type { Cell, GameConfig, TileValue } from '../game-session/index.js';
 import {
   boardPixelWidth,
   boardPixelHeight,
@@ -15,6 +15,7 @@ import {
 import { attachInput } from './input.js';
 import type { InputCallbacks } from './input.js';
 import { createHud, updateHud, updateChainPreview } from './hud.js';
+import { mountTuningConsole } from '../tuning-console/console.js';
 
 function injectStyles(): void {
   const style = document.createElement('style');
@@ -23,6 +24,7 @@ function injectStyles(): void {
       display: flex;
       gap: 24px;
       justify-content: center;
+      align-items: center;
       padding: 12px 0 8px;
       width: 100%;
     }
@@ -44,6 +46,17 @@ function injectStyles(): void {
       font-weight: 700;
       color: #eee;
     }
+    .hud-tuning-toggle {
+      background: #2a3050;
+      color: #fff;
+      border: 1px solid #445;
+      border-radius: 6px;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+    }
+    .hud-tuning-toggle:hover { background: #3a4060; }
     canvas {
       display: block;
       touch-action: none;
@@ -108,19 +121,19 @@ function mount(): void {
   const app = document.getElementById('app');
   if (app === null) return;
 
-  const config = DEFAULT_CONFIG;
-  let session = new GameSession(config);
+  let session = new GameSession(DEFAULT_CONFIG);
 
   const canvas = document.createElement('canvas');
-  const W = boardPixelWidth(config.gridCols);
-  const H = boardPixelHeight(config.gridRows);
-  canvas.width = W;
-  canvas.height = H;
-
-  // Responsive: scale down on narrow viewports, never scale up
-  canvas.style.width = `min(100%, ${W}px)`;
-  canvas.style.aspectRatio = `${W} / ${H}`;
-  canvas.style.height = 'auto';
+  function resizeCanvas(cfg: GameConfig): void {
+    const W = boardPixelWidth(cfg.gridCols);
+    const H = boardPixelHeight(cfg.gridRows);
+    canvas.width = W;
+    canvas.height = H;
+    canvas.style.width = `min(100%, ${W}px)`;
+    canvas.style.aspectRatio = `${W} / ${H}`;
+    canvas.style.height = 'auto';
+  }
+  resizeCanvas(session.getState().config);
 
   const ctxOrNull = canvas.getContext('2d');
   if (ctxOrNull === null) return;
@@ -136,19 +149,19 @@ function mount(): void {
   function computeValidExtensions(chain: readonly Cell[]): ReadonlySet<string> {
     if (chain.length === 0) return new Set();
     const state = session.getState();
+    const cfg = state.config;
     const last = chain[chain.length - 1];
     if (last === undefined) return new Set();
     const lastTile = state.board[last.row]?.[last.col];
     if (lastTile === undefined || lastTile.value === 0) return new Set();
     const chainKeys = new Set(chain.map(c => `${c.row},${c.col}`));
-    const adj = getAdjacentCells(last, config.gridRows, config.gridCols);
+    const adj = getAdjacentCells(last, cfg.gridRows, cfg.gridCols);
     const result = new Set<string>();
     for (const neighbor of adj) {
       const key = `${neighbor.row},${neighbor.col}`;
       if (chainKeys.has(key)) continue;
       const neighborTile = state.board[neighbor.row]?.[neighbor.col];
       if (neighborTile === undefined || neighborTile.value === 0) continue;
-      // First extension: must be same-value as chain[0]
       if (chain.length === 1) {
         const firstCell = chain[0];
         const firstTile = firstCell !== undefined ? state.board[firstCell.row]?.[firstCell.col] : undefined;
@@ -170,8 +183,8 @@ function mount(): void {
       chain: currentChain,
       previewValue,
       validExtensions,
-      rows: config.gridRows,
-      cols: config.gridCols,
+      rows: state.config.gridRows,
+      cols: state.config.gridCols,
     });
     updateHud(hud, state);
   }
@@ -188,7 +201,7 @@ function mount(): void {
         validExtensions = computeValidExtensions(chain);
         const state = session.getState();
         if (chain.length >= 2 && validateChain(state.board, chain).valid) {
-          try { previewValue = computeChainResult(state.board, chain, config); }
+          try { previewValue = computeChainResult(state.board, chain, state.config); }
           catch { previewValue = null; }
         }
         updateChainPreview(hud, previewValue);
@@ -216,17 +229,47 @@ function mount(): void {
     };
   }
 
-  session.on(() => { render(); });
-  let detach = attachInput(canvas, config.gridRows, config.gridCols, makeInputCallbacks());
+  let unsubscribe = session.on(() => { render(); });
+  let detach = attachInput(canvas, session.getState().config.gridRows, session.getState().config.gridCols, makeInputCallbacks());
+
+  function rewireSession(newSession: GameSession): void {
+    unsubscribe();
+    detach();
+    session = newSession;
+    const cfg = session.getState().config;
+    resizeCanvas(cfg);
+    unsubscribe = session.on(() => { render(); });
+    detach = attachInput(canvas, cfg.gridRows, cfg.gridCols, makeInputCallbacks());
+  }
+
+  const tuning = mountTuningConsole({
+    mountTarget: document.body,
+    session,
+    onRequestNewGame(cfg: GameConfig): void {
+      const newSession = new GameSession(cfg);
+      rewireSession(newSession);
+      hud.gameOver.classList.add('hidden');
+      tuning.rebindSession(newSession);
+      render();
+    },
+  });
+
+  hud.tuningToggle.addEventListener('click', () => {
+    if (document.body.hasAttribute('data-console-open')) {
+      document.body.removeAttribute('data-console-open');
+    } else {
+      document.body.setAttribute('data-console-open', '');
+    }
+  });
 
   const restartBtn = document.getElementById('game-over-restart');
   if (restartBtn !== null) {
     restartBtn.addEventListener('click', () => {
       hud.gameOver.classList.add('hidden');
-      detach();
-      session = new GameSession(config);
-      session.on(() => { render(); });
-      detach = attachInput(canvas, config.gridRows, config.gridCols, makeInputCallbacks());
+      const currentCfg = session.getState().config;
+      const newSession = new GameSession(currentCfg);
+      rewireSession(newSession);
+      tuning.rebindSession(newSession);
       render();
     });
   }
