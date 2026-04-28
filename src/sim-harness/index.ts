@@ -9,6 +9,7 @@ export {
   countLegalChainStarts,
   countRetiredTiles,
   enumerateCandidateChains,
+  toDecision,
 } from './strategies/common.js';
 export type {
   GameRunResult,
@@ -21,7 +22,11 @@ export type {
   SimulationOutputs,
   SimulationResultRow,
   StrategyContext,
+  StrategyDecision,
+  StrategyDiagnostics,
+  StrategyIntent,
   StrategyId,
+  StrategyMode,
   SweepOptions,
   SweepValue,
   TurnRecord,

@@ -66,7 +66,8 @@ function runOneGame(
   let deathCause: GameRunResult['deathCause'] = 'max-turns';
 
   while (state.phase === 'playing' && state.turn < options.maxTurns) {
-    const action = options.strategy.chooseAction(state, context);
+    const decision = options.strategy.chooseAction(state, context);
+    const { action } = decision;
     if (action === null) {
       deathCause = 'strategy-null';
       break;
@@ -83,7 +84,7 @@ function runOneGame(
     const newEvents = nextState.events.slice(previousEventCount);
     const legalChainStartsAfter = countLegalChainStarts(nextState.board);
 
-    turns.push({
+    const turnRecord: TurnRecord = {
       turn: nextState.turn,
       chain: action.chain,
       chainLength: action.chain.length,
@@ -97,7 +98,11 @@ function runOneGame(
       isolatedRetiredTileCountBefore,
       isolatedRetiredTileCountAfter: countIsolatedRetiredTiles(nextState.board),
       events: newEvents,
-    });
+    };
+
+    turns.push(decision.diagnostics === undefined
+      ? turnRecord
+      : { ...turnRecord, strategyDiagnostics: decision.diagnostics });
 
     state = nextState;
   }

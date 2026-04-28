@@ -35,19 +35,25 @@ describe('strategies', () => {
 
   it('random strategy returns a legal chain or null', () => {
     const state = createGame({ ...DEFAULT_CONFIG, prngSeed: 21 });
-    const action = randomStrategy.chooseAction(state, context());
+    const { action } = randomStrategy.chooseAction(state, context());
     expect(action === null || validateChain(state.board, action.chain).valid).toBe(true);
   });
 
   it('greedy strategy returns a legal chain or null', () => {
     const state = createGame({ ...DEFAULT_CONFIG, prngSeed: 22 });
-    const action = greedyStrategy.chooseAction(state, context());
+    const { action } = greedyStrategy.chooseAction(state, context());
     expect(action === null || validateChain(state.board, action.chain).valid).toBe(true);
   });
 
   it('heuristic strategy returns a legal chain or null', () => {
     const state = createGame({ ...DEFAULT_CONFIG, prngSeed: 23 });
-    const action = heuristicStrategy.chooseAction(state, context());
+    const { action } = heuristicStrategy.chooseAction(state, context());
     expect(action === null || validateChain(state.board, action.chain).valid).toBe(true);
+  });
+
+  it('strategies include diagnostics when they choose an action', () => {
+    const state = createGame({ ...DEFAULT_CONFIG, prngSeed: 24 });
+    const decision = greedyStrategy.chooseAction(state, context());
+    expect(decision.action === null || decision.diagnostics?.candidateChainLength).toBeTruthy();
   });
 });

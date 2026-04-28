@@ -12,6 +12,12 @@ import type {
   Col,
   TileValue,
 } from '../../game-kernel/index.js';
+import type {
+  StrategyDecision,
+  StrategyDiagnostics,
+  StrategyIntent,
+  StrategyMode,
+} from '../types.js';
 
 export interface CandidateChain {
   readonly chain: readonly Cell[];
@@ -156,4 +162,28 @@ export function enumerateCandidateChains(
 
 export function toCommitAction(candidate: CandidateChain): CommitChainAction {
   return asAction(candidate.chain);
+}
+
+export function toDecision(
+  candidate: CandidateChain | undefined,
+  mode: StrategyMode,
+  reasonCode: string,
+  intent: StrategyIntent
+): StrategyDecision {
+  if (candidate === undefined) {
+    return { action: null };
+  }
+
+  const diagnostics: StrategyDiagnostics = {
+    mode,
+    reasonCode,
+    intent,
+    candidateChainLength: candidate.chain.length,
+    projectedResultValue: candidate.resultValue,
+  };
+
+  return {
+    action: toCommitAction(candidate),
+    diagnostics,
+  };
 }

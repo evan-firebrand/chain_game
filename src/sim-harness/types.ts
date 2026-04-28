@@ -8,7 +8,15 @@ import type {
   TileValue,
 } from '../game-kernel/index.js';
 
-export type StrategyId = 'random' | 'greedy' | 'heuristic';
+export type StrategyId =
+  | 'random'
+  | 'greedy'
+  | 'heuristic'
+  | 'longRandomWalk'
+  | 'longGreedyWalk'
+  | 'milestonePush'
+  | 'preRetirementCleanup'
+  | 'strategicHumanLike';
 
 export type RetirementModeLabel = 'cascade';
 
@@ -17,9 +25,36 @@ export interface StrategyContext {
   readonly random: () => number;
 }
 
+export type StrategyMode =
+  | 'random'
+  | 'greedy'
+  | 'heuristic'
+  | 'long-random-walk'
+  | 'long-greedy-walk'
+  | 'cleanup'
+  | 'setup'
+  | 'build'
+  | 'milestone'
+  | 'recovery';
+
+export type StrategyIntent = 'cleanup' | 'setup' | 'push' | 'milestone' | 'recovery';
+
+export interface StrategyDiagnostics {
+  readonly mode: StrategyMode;
+  readonly reasonCode: string;
+  readonly intent: StrategyIntent;
+  readonly candidateChainLength: number;
+  readonly projectedResultValue: TileValue;
+}
+
+export interface StrategyDecision {
+  readonly action: CommitChainAction | null;
+  readonly diagnostics?: StrategyDiagnostics;
+}
+
 export interface SimStrategy {
   readonly id: StrategyId;
-  chooseAction(state: GameState, context: StrategyContext): CommitChainAction | null;
+  chooseAction(state: GameState, context: StrategyContext): StrategyDecision;
 }
 
 export interface SimulationInputs {
@@ -45,6 +80,7 @@ export interface TurnRecord {
   readonly retiredTileCountAfter: number;
   readonly isolatedRetiredTileCountBefore: number;
   readonly isolatedRetiredTileCountAfter: number;
+  readonly strategyDiagnostics?: StrategyDiagnostics;
   readonly events: readonly GameEvent[];
 }
 

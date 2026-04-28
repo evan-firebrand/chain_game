@@ -5,6 +5,7 @@ import {
   compareChains,
   countLegalChainStarts,
   enumerateCandidateChains,
+  toDecision,
   toCommitAction,
 } from './common.js';
 
@@ -12,7 +13,7 @@ export const heuristicStrategy: SimStrategy = {
   id: 'heuristic',
   chooseAction(state: GameState, context: StrategyContext) {
     const candidates = enumerateCandidateChains(state, context.maxChainLength);
-    if (candidates.length === 0) return null;
+    if (candidates.length === 0) return { action: null };
 
     const scored = candidates.map(candidate => {
       const nextState = applyAction(state, toCommitAction(candidate));
@@ -38,6 +39,6 @@ export const heuristicStrategy: SimStrategy = {
       return compareChains(a.candidate.chain, b.candidate.chain);
     })[0];
 
-    return best === undefined ? null : toCommitAction(best.candidate);
+    return toDecision(best?.candidate, 'heuristic', 'retirement-progress-board-health', 'push');
   },
 };
