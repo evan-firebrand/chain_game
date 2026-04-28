@@ -1,0 +1,159 @@
+import {
+  computeChainResult,
+  getAdjacentCells,
+  validateChain,
+} from '../../game-kernel/index.js';
+import type {
+  Board,
+  Cell,
+  CommitChainAction,
+  GameState,
+  Row,
+  Col,
+  TileValue,
+} from '../../game-kernel/index.js';
+
+export interface CandidateChain {
+  readonly chain: readonly Cell[];
+  readonly resultValue: TileValue;
+}
+
+function cellKey(cell: Cell): string {
+  return `${cell.row},${cell.col}`;
+}
+
+function compareCell(a: Cell, b: Cell): number {
+  return a.row === b.row ? a.col - b.col : a.row - b.row;
+}
+
+export function compareChains(a: readonly Cell[], b: readonly Cell[]): number {
+  const length = Math.min(a.length, b.length);
+  for (let i = 0; i < length; i++) {
+    const left = a[i];
+    const right = b[i];
+    if (left === undefined || right === undefined) continue;
+    const byCell = compareCell(left, right);
+    if (byCell !== 0) return byCell;
+  }
+  return a.length - b.length;
+}
+
+function asAction(chain: readonly Cell[]): CommitChainAction {
+  return { kind: 'commit-chain', chain };
+}
+
+export function countLegalChainStarts(board: Board): number {
+  const rows = board.length;
+  const cols = board[0]?.length ?? 0;
+  let count = 0;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const tile = board[r]?.[c];
+      if (tile === undefined || tile.value === 0) continue;
+
+      const origin = { row: r as Row, col: c as Col };
+      for (const neighbor of getAdjacentCells(origin, rows, cols)) {
+        if (compareCell(origin, neighbor) >= 0) continue;
+        const neighborTile = board[neighbor.row]?.[neighbor.col];
+        if (neighborTile !== undefined && neighborTile.value === tile.value) {
+          count++;
+        }
+      }
+    }
+  }
+
+  return count;
+}
+
+export function countRetiredTiles(board: Board): number {
+  let count = 0;
+  for (const row of board) {
+    for (const tile of row) {
+      if (tile.value !== 0 && tile.retired) count++;
+    }
+  }
+  return count;
+}
+
+export function countIsolatedRetiredTiles(board: Board): number {
+  const rows = board.length;
+  const cols = board[0]?.length ?? 0;
+  let count = 0;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const tile = board[r]?.[c];
+      if (tile === undefined || tile.value === 0 || !tile.retired) continue;
+
+      const hasSameNeighbor = getAdjacentCells({ row: r as Row, col: c as Col }, rows, cols)
+        .some(neighbor => board[neighbor.row]?.[neighbor.col]?.value === tile.value);
+      if (!hasSameNeighbor) count++;
+    }
+  }
+
+  return count;
+}
+
+export function enumerateCandidateChains(
+  state: GameState,
+  maxChainLength: number
+): CandidateChain[] {
+  const { board } = state;
+  const rows = board.length;
+  const cols = board[0]?.length ?? 0;
+  const cappedMax = Math.max(2, Math.min(maxChainLength, rows * cols));
+  const candidates: CandidateChain[] = [];
+  const seenCandidates = new Set<string>();
+
+  function addCandidate(chain: readonly Cell[]): void {
+    const key = chain.map(cellKey).join('|');
+    if (seenCandidates.has(key)) return;
+    seenCandidates.add(key);
+    candidates.push({
+      chain: [...chain],
+      resultValue: computeChainResult(board, chain, state.config),
+    });
+  }
+
+  function extend(chain: readonly Cell[], used: ReadonlySet<string>): void {
+    if (chain.length >= cappedMax) return;
+    const last = chain[chain.length - 1];
+    if (last === undefined) return;
+
+    const neighbors = getAdjacentCells(last, rows, cols).sort(compareCell);
+    for (const neighbor of neighbors) {
+      const key = cellKey(neighbor);
+      if (used.has(key)) continue;
+      const nextChain = [...chain, neighbor];
+      if (!validateChain(board, nextChain).valid) continue;
+
+      addCandidate(nextChain);
+      const nextUsed = new Set(used);
+      nextUsed.add(key);
+      extend(nextChain, nextUsed);
+    }
+  }
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const tile = board[r]?.[c];
+      if (tile === undefined || tile.value === 0) continue;
+
+      const start = { row: r as Row, col: c as Col };
+      for (const neighbor of getAdjacentCells(start, rows, cols).sort(compareCell)) {
+        const chain = [start, neighbor];
+        if (!validateChain(board, chain).valid) continue;
+
+        addCandidate(chain);
+        extend(chain, new Set(chain.map(cellKey)));
+      }
+    }
+  }
+
+  return candidates.sort((a, b) => compareChains(a.chain, b.chain));
+}
+
+export function toCommitAction(candidate: CandidateChain): CommitChainAction {
+  return asAction(candidate.chain);
+}
