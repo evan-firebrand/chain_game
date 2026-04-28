@@ -199,3 +199,53 @@ export interface SweepOptions<T> extends Omit<RunSimulationOptions, 'config'> {
   readonly values: readonly SweepValue<T>[];
   readonly applyValue: (config: GameConfig, value: T) => GameConfig;
 }
+
+export interface ExperimentProfile {
+  readonly id: string;
+  readonly label: string;
+  readonly designQuestion: string;
+  readonly config: GameConfig;
+}
+
+export interface TuningTarget {
+  readonly capTurns: number;
+  readonly naturalDeathRateMin: number;
+  readonly naturalDeathRateMax: number;
+  readonly medianFinalTurnMin: number;
+  readonly medianFinalTurnMax: number;
+  readonly firstRetirementTurnMin: number;
+  readonly firstRetirementTurnMax: number;
+  readonly gamesWithRetirementMinRate: number;
+  readonly cascadeImmediateGameOverMaxRate: number;
+}
+
+export type CandidateLabel =
+  | 'too-forgiving'
+  | 'too-random'
+  | 'too-forced'
+  | 'long-chain-dominant'
+  | 'retirement-cliff'
+  | 'promising';
+
+export interface TargetScore {
+  readonly distance: number;
+  readonly deltas: Readonly<Record<string, number>>;
+  readonly hardFailures: readonly string[];
+  readonly labels: readonly CandidateLabel[];
+}
+
+export interface NotableSeeds {
+  readonly shortestNaturalDeath?: number;
+  readonly longestCappedSurvival?: number;
+  readonly largestCascade?: number;
+  readonly largestOvershoot?: number;
+  readonly mostIsolatedRetiredTiles?: number;
+  readonly strongestRecovery?: number;
+}
+
+export interface BatchResultRow {
+  readonly profile: ExperimentProfile;
+  readonly result: SimulationResultRow;
+  readonly score: TargetScore;
+  readonly notableSeeds: NotableSeeds;
+}

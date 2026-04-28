@@ -1,6 +1,21 @@
 export { analyzeGames } from './analyzer.js';
 export { runSimulation } from './runner.js';
 export { runSweep } from './sweep.js';
+export { collectNotableSeeds, formatBatchTable, runExperimentBatch } from './batch.js';
+export {
+  baselinePowerLaw,
+  createExperimentProfiles,
+  flat,
+  narrowPool,
+  steepPowerLaw,
+  volatile,
+} from './profiles.js';
+export {
+  RECOMMENDED_TUNING_TARGET,
+  classifyCandidate,
+  findNotableSeedBy,
+  scoreAgainstTarget,
+} from './scoring.js';
 export { randomStrategy } from './strategies/random.js';
 export { greedyStrategy } from './strategies/greedy.js';
 export { heuristicStrategy } from './strategies/heuristic.js';
@@ -24,6 +39,9 @@ export {
 } from './strategies/common.js';
 export type {
   GameRunResult,
+  BatchResultRow,
+  CandidateLabel,
+  ExperimentProfile,
   RetirementMetrics,
   RetirementModeLabel,
   RetirementTriggerSummary,
@@ -40,5 +58,8 @@ export type {
   StrategyMode,
   SweepOptions,
   SweepValue,
+  TargetScore,
+  TuningTarget,
   TurnRecord,
 } from './types.js';
+export type { BatchRunOptions } from './batch.js';
