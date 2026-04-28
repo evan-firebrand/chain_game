@@ -1,73 +1,28 @@
-# React + TypeScript + Vite
+# 2248
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A single-player chain-merge puzzle: drag through paths of equal-rank tiles to collapse them into the next rank, build chains, and survive as long as the spawn pool keeps escalating. Built with React 19, Vite 8, and TypeScript (strict).
 
-Currently, two official plugins are available:
+## Quick start
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+The dev server runs on port **5180** (pinned via `.claude/launch.json`).
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Project layout
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- `src/game/` — pure, deterministic engine (rules, spawn algos, bot, scenarios, RNG).
+- `src/components/`, `src/views/`, `src/hooks/`, `src/App.tsx` — UI layer.
+- `scripts/` — balance-simulation harness. The dispatcher is `scripts/harness.ts`; named studies live under `scripts/studies/`.
+- `baselines/` — committed reference perf manifests for drift detection.
+- `docs/harness/` — harness usage and stats methodology.
+
+## Eval harness
+
+The harness runs deterministic bot games and emits replayable JSON manifests. See [`docs/harness/README.md`](docs/harness/README.md) for the full CLI surface and [`docs/harness/STATS.md`](docs/harness/STATS.md) for how to read confidence intervals and paired-bootstrap deltas.
+
+## Working with Claude Code
+
+If you're contributing as (or with) an agent, start at [`CLAUDE.md`](CLAUDE.md) — it covers the layout, conventions, and don'ts that aren't obvious from the source alone.

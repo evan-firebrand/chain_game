@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run lint)",
+      "Bash(npm run build)",
+      "Bash(npm run harness:*)",
+      "Bash(npm run bench:*)",
+      "Bash(npm run sweep:*)",
+      "Bash(npm run baseline:*)",
+      "Bash(npm run study:*)",
+      "Bash(npm run replay:*)",
+      "Bash(npm run compare:*)",
+      "Bash(npm run power:*)",
+      "Bash(npm run describe:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(node --version)",
+      "Bash(npx tsc --noEmit:*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          { "type": "command",
+            "command": "test -d node_modules || npm ci --no-audit --no-fund" }
+        ]
+      }
+    ]
+  }
+}
