@@ -123,7 +123,39 @@ export interface RetirementMetrics {
   readonly activeSpawnPoolAtDeath: readonly (readonly [TileValue, TileValue])[];
   readonly retiredTileCountOverTime: readonly number[];
   readonly isolatedRetiredTileCountOverTime: readonly number[];
+  readonly legalChainStartDeltaAfterRetirement: readonly number[];
+  readonly turnsSurvivedAfterFirstRetirement: readonly number[];
+  readonly turnsSurvivedAfterSecondRetirement: readonly number[];
   readonly triggers: readonly RetirementTriggerSummary[];
+}
+
+export interface ChoiceRichnessMetrics {
+  readonly legalChainStartsBefore: {
+    readonly p10: number;
+    readonly median: number;
+    readonly p90: number;
+  };
+  readonly legalChainStartsAfter: {
+    readonly p10: number;
+    readonly median: number;
+    readonly p90: number;
+  };
+  readonly forcedTurnBuckets: {
+    readonly oneStart: number;
+    readonly twoToThreeStarts: number;
+    readonly fourPlusStarts: number;
+  };
+}
+
+export interface ChainLengthBucketMetrics {
+  readonly short2To4: number;
+  readonly medium5To9: number;
+  readonly long10Plus: number;
+}
+
+export interface StrategyBehaviorMetrics {
+  readonly modeDistribution: Readonly<Record<string, number>>;
+  readonly intentDistribution: Readonly<Record<string, number>>;
 }
 
 export interface SimulationOutputs {
@@ -134,8 +166,11 @@ export interface SimulationOutputs {
   };
   readonly maxTileDistribution: Readonly<Record<number, number>>;
   readonly chainLengthDistribution: Readonly<Record<number, number>>;
+  readonly chainLengthBuckets: ChainLengthBucketMetrics;
   readonly resultValueDistribution: Readonly<Record<number, number>>;
   readonly deathCauseDistribution: Readonly<Record<GameRunResult['deathCause'], number>>;
+  readonly choiceRichness: ChoiceRichnessMetrics;
+  readonly strategyBehavior: StrategyBehaviorMetrics;
   readonly retirement: RetirementMetrics;
 }
 
