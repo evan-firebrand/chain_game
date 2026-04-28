@@ -139,9 +139,23 @@ export function renderBoard(ctx: CanvasRenderingContext2D, s: RenderState): void
       let fillColor = color;
       if (inChain) fillColor = lighten(color, 0.35);
       else if (hasActiveChain && !isValidNext) fillColor = darken(color, 0.5);
+      else if (tile.retired) fillColor = darken(color, 0.35);
       ctx.fillStyle = fillColor;
       roundRect(ctx, x, y, TILE, TILE, RADIUS);
       ctx.fill();
+
+      if (tile.retired) {
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(x + 14, y + TILE - 14);
+        ctx.lineTo(x + TILE - 14, y + 14);
+        ctx.moveTo(x + 24, y + TILE - 10);
+        ctx.lineTo(x + TILE - 10, y + 24);
+        ctx.stroke();
+        ctx.restore();
+      }
 
       // Chain highlight border; green pulse on valid-next tiles
       if (inChain) {

@@ -11,10 +11,12 @@ import type {
   GameEvent,
   ChainResolvedEvent,
   TilesSpawnedEvent,
+  RetirementFiredEvent,
   GameOverEvent,
 } from './types.js';
 import { applyGravity, setTile, removeTiles, spawnTiles } from './board.js';
 import { getAdjacentCells, validateChainExtension, resolveChain } from './chain.js';
+import { checkRetirement, advanceSpawnPool, markRetiredTiles } from './retirement.js';
 
 // Re-export public types
 export type {
@@ -62,7 +64,11 @@ function pickTileValue(
 
   let v = config.spawnPoolMin;
   while (v <= config.spawnPoolMax) {
-    const weight = config.spawnWeights[v] ?? 0;
+    const configuredWeight = config.spawnWeights[v];
+    const previousTier = (v / 2) as TileValue;
+    const weight = configuredWeight ?? (
+      v === config.spawnPoolMax ? (config.spawnWeights[previousTier] ?? 1) / 2 : 0
+    );
     if (weight > 0) {
       entries.push([v, weight]);
       totalWeight += weight;
@@ -319,15 +325,6 @@ export function applyAction(state: GameState, action: Action): GameState {
       // Apply gravity
       board = applyGravity(board);
 
-      // Spawn L-1 tiles
-      const { board: boardAfterSpawn, prngState: newPrng, spawned } = spawnTiles(
-        board,
-        chain.length,
-        state.config,
-        state.prngState
-      );
-      board = boardAfterSpawn;
-
       // Build chain-resolved event
       const chainResolvedEvent: ChainResolvedEvent = {
         kind: 'chain-resolved',
@@ -339,6 +336,47 @@ export function applyAction(state: GameState, action: Action): GameState {
       };
       newEvents.push(chainResolvedEvent);
 
+      // Update maxTileEver
+      const newMaxTileEver = (
+        resultValue > state.maxTileEver ? resultValue : state.maxTileEver
+      );
+
+      let runtimeSpawnConfig: GameConfig = {
+        ...state.config,
+        spawnPoolMin: state.spawnPoolMin,
+        spawnPoolMax: state.spawnPoolMax,
+      };
+      let newSpawnPoolMin = state.spawnPoolMin;
+      let newSpawnPoolMax = state.spawnPoolMax;
+
+      for (;;) {
+        const retiredTier = checkRetirement(newMaxTileEver, newSpawnPoolMax);
+        if (retiredTier === null) break;
+
+        const advancedPool = advanceSpawnPool(runtimeSpawnConfig, retiredTier);
+        newSpawnPoolMin = advancedPool.spawnPoolMin;
+        newSpawnPoolMax = advancedPool.spawnPoolMax;
+        runtimeSpawnConfig = { ...state.config, ...advancedPool };
+        board = markRetiredTiles(board, retiredTier);
+
+        const retirementEvent: RetirementFiredEvent = {
+          kind: 'retirement-fired',
+          retiredTier,
+          newSpawnPoolMin,
+          newSpawnPoolMax,
+        };
+        newEvents.push(retirementEvent);
+      }
+
+      // Spawn L-1 tiles
+      const { board: boardAfterSpawn, prngState: newPrng, spawned } = spawnTiles(
+        board,
+        chain.length,
+        runtimeSpawnConfig,
+        state.prngState
+      );
+      board = boardAfterSpawn;
+
       // Build tiles-spawned event
       if (spawned.length > 0) {
         const tilesSpawnedEvent: TilesSpawnedEvent = {
@@ -347,15 +385,6 @@ export function applyAction(state: GameState, action: Action): GameState {
         };
         newEvents.push(tilesSpawnedEvent);
       }
-
-      // Update maxTileEver
-      const newMaxTileEver = (
-        resultValue > state.maxTileEver ? resultValue : state.maxTileEver
-      );
-
-      // Retirement stub — checkRetirement goes here in Phase 4
-      const newSpawnPoolMin = state.spawnPoolMin;
-      const newSpawnPoolMax = state.spawnPoolMax;
 
       // Check loss condition
       const legalStart = hasLegalChainStart(board);

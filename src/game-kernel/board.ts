@@ -90,7 +90,11 @@ function pickTileValue(
   let v = config.spawnPoolMin;
   while (v <= config.spawnPoolMax) {
     /* v8 ignore next 1 */
-    const weight = config.spawnWeights[v] ?? 0;
+    const configuredWeight = config.spawnWeights[v];
+    const previousTier = (v / 2) as TileValue;
+    const weight = configuredWeight ?? (
+      v === config.spawnPoolMax ? (config.spawnWeights[previousTier] ?? 1) / 2 : 0
+    );
     if (weight > 0) {
       entries.push([v, weight]);
       totalWeight += weight;

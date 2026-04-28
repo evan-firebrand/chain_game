@@ -3,6 +3,7 @@ import type { GameState } from '../game-session/index.js';
 export interface HudElements {
   turn: HTMLElement;
   maxTile: HTMLElement;
+  spawnPool: HTMLElement;
   chainValue: HTMLElement;
   gameOver: HTMLElement;
   tuningToggle: HTMLButtonElement;
@@ -20,6 +21,10 @@ export function createHud(container: HTMLElement): HudElements {
   maxTileEl.className = 'hud-stat';
   maxTileEl.innerHTML = '<span class="hud-label">BEST</span><span class="hud-value" id="hud-max">—</span>';
 
+  const spawnPoolEl = document.createElement('div');
+  spawnPoolEl.className = 'hud-stat';
+  spawnPoolEl.innerHTML = '<span class="hud-label">POOL</span><span class="hud-value" id="hud-pool">2–256</span>';
+
   const chainValueEl = document.createElement('div');
   chainValueEl.className = 'hud-stat';
   chainValueEl.innerHTML = '<span class="hud-label">CHAIN</span><span class="hud-value" id="hud-chain">—</span>';
@@ -33,6 +38,7 @@ export function createHud(container: HTMLElement): HudElements {
   topBar.appendChild(turnEl);
   topBar.appendChild(chainValueEl);
   topBar.appendChild(maxTileEl);
+  topBar.appendChild(spawnPoolEl);
   topBar.appendChild(tuningToggle);
   container.appendChild(topBar);
 
@@ -50,6 +56,7 @@ export function createHud(container: HTMLElement): HudElements {
   return {
     turn: document.getElementById('hud-turn') as HTMLElement,
     maxTile: document.getElementById('hud-max') as HTMLElement,
+    spawnPool: document.getElementById('hud-pool') as HTMLElement,
     chainValue: document.getElementById('hud-chain') as HTMLElement,
     gameOver: gameOverEl,
     tuningToggle,
@@ -59,6 +66,7 @@ export function createHud(container: HTMLElement): HudElements {
 export function updateHud(hud: HudElements, state: GameState): void {
   hud.turn.textContent = String(state.turn);
   hud.maxTile.textContent = state.maxTileEver === 0 ? '—' : String(state.maxTileEver);
+  hud.spawnPool.textContent = `${state.spawnPoolMin}–${state.spawnPoolMax}`;
 
   if (state.phase === 'game-over') {
     const statsEl = document.getElementById('game-over-stats');
