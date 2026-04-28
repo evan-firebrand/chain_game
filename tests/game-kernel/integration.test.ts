@@ -15,6 +15,7 @@ import type {
   TileValue,
   Board,
   Tile,
+  TilesSpawnedEvent,
 } from '../../src/game-kernel/types.js';
 
 // ── Config fixture ──────────────────────────────────────────────────────────
@@ -127,17 +128,17 @@ describe("applyAction('commit-chain') — 2-cell chain", () => {
     const newEvents = s1.events.slice(s0.events.length);
     const ev = newEvents.find(e => e.kind === 'chain-resolved') as Extract<typeof newEvents[0], { kind: 'chain-resolved' }>;
     expect(ev).toBeDefined();
-    expect(ev!.resultValue).toBe(4);
-    expect(ev!.sameExtensions).toBe(0);
-    expect(ev!.doublingExtensions).toBe(0);
-    expect(ev!.chain).toHaveLength(2);
+    expect(ev.resultValue).toBe(4);
+    expect(ev.sameExtensions).toBe(0);
+    expect(ev.doublingExtensions).toBe(0);
+    expect(ev.chain).toHaveLength(2);
   });
 
   it('exactly 1 tile spawns after chain of length 2', () => {
     const s0 = createGame(CONFIG);
     const s1 = applyAction(s0, CHAIN_2);
     const newEvents = s1.events.slice(s0.events.length);
-    const spawnEv = newEvents.find(e => e.kind === 'tiles-spawned') as Extract<typeof newEvents[0], { kind: 'tiles-spawned' }> | undefined;
+    const spawnEv = newEvents.find((e): e is TilesSpawnedEvent => e.kind === 'tiles-spawned');
     expect(spawnEv).toBeDefined();
     expect(spawnEv!.spawned).toHaveLength(1);
   });
@@ -191,7 +192,7 @@ describe("applyAction('commit-chain') — 3-cell chain", () => {
     const s0 = createGame(CONFIG);
     const s1 = applyAction(s0, CHAIN_3);
     const newEvents = s1.events.slice(s0.events.length);
-    const spawnEv = newEvents.find(e => e.kind === 'tiles-spawned') as Extract<typeof newEvents[0], { kind: 'tiles-spawned' }> | undefined;
+    const spawnEv = newEvents.find((e): e is TilesSpawnedEvent => e.kind === 'tiles-spawned');
     expect(spawnEv).toBeDefined();
     expect(spawnEv!.spawned).toHaveLength(2);
   });
@@ -200,7 +201,7 @@ describe("applyAction('commit-chain') — 3-cell chain", () => {
     const s0 = createGame(CONFIG);
     const s1 = applyAction(s0, CHAIN_3);
     const newEvents = s1.events.slice(s0.events.length);
-    const spawnEv = newEvents.find(e => e.kind === 'tiles-spawned') as Extract<typeof newEvents[0], { kind: 'tiles-spawned' }> | undefined;
+    const spawnEv = newEvents.find((e): e is TilesSpawnedEvent => e.kind === 'tiles-spawned');
     const validPool = new Set([2, 4, 8, 16, 32, 64, 128, 256]);
     for (const { value } of spawnEv!.spawned) {
       expect(validPool.has(value)).toBe(true);
@@ -240,8 +241,8 @@ describe("applyAction('commit-chain') — determinism", () => {
     // spawned tiles should be identical
     const newEvA = s1a.events.slice(s0a.events.length);
     const newEvB = s1b.events.slice(s0b.events.length);
-    const spawnA = newEvA.find(e => e.kind === 'tiles-spawned') as any;
-    const spawnB = newEvB.find(e => e.kind === 'tiles-spawned') as any;
+    const spawnA = newEvA.find((e): e is TilesSpawnedEvent => e.kind === 'tiles-spawned');
+    const spawnB = newEvB.find((e): e is TilesSpawnedEvent => e.kind === 'tiles-spawned');
     expect(spawnA!.spawned).toEqual(spawnB!.spawned);
   });
 });
@@ -387,20 +388,20 @@ describe('spawnTiles (via applyAction) — spawn count invariant', () => {
     const s0 = createGame(CONFIG);
     // 2-chain → 1 spawn
     const s1 = applyAction(s0, CHAIN_2);
-    const ev1 = s1.events.find(e => e.kind === 'tiles-spawned') as any;
+    const ev1 = s1.events.find((e): e is TilesSpawnedEvent => e.kind === 'tiles-spawned');
     expect(ev1!.spawned).toHaveLength(1);
 
     // 3-chain → 2 spawns
     const s0b = createGame(CONFIG);
     const s1b = applyAction(s0b, CHAIN_3);
-    const ev1b = s1b.events.find(e => e.kind === 'tiles-spawned') as any;
+    const ev1b = s1b.events.find((e): e is TilesSpawnedEvent => e.kind === 'tiles-spawned');
     expect(ev1b!.spawned).toHaveLength(2);
   });
 
   it('spawned tile values are all valid powers of 2 within pool', () => {
     const s0 = createGame(CONFIG);
     const s1 = applyAction(s0, CHAIN_3);
-    const ev = s1.events.find(e => e.kind === 'tiles-spawned') as any;
+    const ev = s1.events.find((e): e is TilesSpawnedEvent => e.kind === 'tiles-spawned');
     const validPool = [2, 4, 8, 16, 32, 64, 128, 256];
     for (const { value } of ev!.spawned) {
       expect(validPool).toContain(value);
@@ -435,8 +436,8 @@ describe('spawnTiles (via applyAction) — spawn count invariant', () => {
 
     const r1 = applyAction(s0, ch);
     const r2 = applyAction(s0, ch);
-    const ev1 = r1.events.find(e => e.kind === 'tiles-spawned') as any;
-    const ev2 = r2.events.find(e => e.kind === 'tiles-spawned') as any;
+    const ev1 = r1.events.find((e): e is TilesSpawnedEvent => e.kind === 'tiles-spawned');
+    const ev2 = r2.events.find((e): e is TilesSpawnedEvent => e.kind === 'tiles-spawned');
     expect(ev1!.spawned).toEqual(ev2!.spawned);
   });
 });

@@ -13,6 +13,7 @@ import {
   renderBoard,
 } from './board.js';
 import { attachInput } from './input.js';
+import type { InputCallbacks } from './input.js';
 import { createHud, updateHud, updateChainPreview } from './hud.js';
 
 function injectStyles(): void {
@@ -128,11 +129,11 @@ function mount(): void {
   const hud = createHud(app);
   app.appendChild(canvas);
 
-  let currentChain: ReadonlyArray<Cell> = [];
+  let currentChain: readonly Cell[] = [];
   let previewValue: TileValue | null = null;
   let validExtensions: ReadonlySet<string> = new Set();
 
-  function computeValidExtensions(chain: ReadonlyArray<Cell>): ReadonlySet<string> {
+  function computeValidExtensions(chain: readonly Cell[]): ReadonlySet<string> {
     if (chain.length === 0) return new Set();
     const state = session.getState();
     const last = chain[chain.length - 1];
@@ -149,7 +150,8 @@ function mount(): void {
       if (neighborTile === undefined || neighborTile.value === 0) continue;
       // First extension: must be same-value as chain[0]
       if (chain.length === 1) {
-        const firstTile = state.board[chain[0]!.row]?.[chain[0]!.col];
+        const firstCell = chain[0];
+        const firstTile = firstCell !== undefined ? state.board[firstCell.row]?.[firstCell.col] : undefined;
         if (firstTile !== undefined && neighborTile.value === firstTile.value) {
           result.add(key);
         }
@@ -174,13 +176,13 @@ function mount(): void {
     updateHud(hud, state);
   }
 
-  function makeInputCallbacks() {
+  function makeInputCallbacks(): InputCallbacks {
     return {
-      canExtend(chain: ReadonlyArray<Cell>, cell: Cell): boolean {
+      canExtend(chain: readonly Cell[], cell: Cell): boolean {
         const state = session.getState();
         return validateChain(state.board, [...chain, cell]).valid;
       },
-      onChainUpdate(chain: ReadonlyArray<Cell>) {
+      onChainUpdate(chain: readonly Cell[]): void {
         currentChain = chain;
         previewValue = null;
         validExtensions = computeValidExtensions(chain);
@@ -192,7 +194,7 @@ function mount(): void {
         updateChainPreview(hud, previewValue);
         render();
       },
-      onChainCommit(chain: ReadonlyArray<Cell>) {
+      onChainCommit(chain: readonly Cell[]): void {
         const state = session.getState();
         currentChain = [];
         previewValue = null;
@@ -204,7 +206,7 @@ function mount(): void {
           render();
         }
       },
-      onChainCancel() {
+      onChainCancel(): void {
         currentChain = [];
         previewValue = null;
         validExtensions = new Set();
@@ -214,7 +216,7 @@ function mount(): void {
     };
   }
 
-  session.on(() => render());
+  session.on(() => { render(); });
   let detach = attachInput(canvas, config.gridRows, config.gridCols, makeInputCallbacks());
 
   const restartBtn = document.getElementById('game-over-restart');
@@ -223,7 +225,7 @@ function mount(): void {
       hud.gameOver.classList.add('hidden');
       detach();
       session = new GameSession(config);
-      session.on(() => render());
+      session.on(() => { render(); });
       detach = attachInput(canvas, config.gridRows, config.gridCols, makeInputCallbacks());
       render();
     });

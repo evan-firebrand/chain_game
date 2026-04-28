@@ -57,7 +57,7 @@ function pickTileValue(
   config: Pick<GameConfig, 'spawnPoolMin' | 'spawnPoolMax' | 'spawnWeights'>,
   rand: number
 ): TileValue {
-  const entries: Array<[TileValue, number]> = [];
+  const entries: [TileValue, number][] = [];
   let totalWeight = 0;
 
   let v = config.spawnPoolMin;
@@ -128,7 +128,7 @@ export function createGame(config: GameConfig): GameState {
   // Fill board, retry until at least one valid chain start exists
   let board: Board;
   let attempt = 0;
-  do {
+  for (;;) {
     const result = fillBoard(config.gridRows, config.gridCols, config, prngState);
     board = result.board;
     prngState = result.prngState;
@@ -138,14 +138,13 @@ export function createGame(config: GameConfig): GameState {
 
     // If no legal start after many attempts, force a pair
     if (attempt >= 100) {
-      // Force the first two cells to have the same value as the first cell
       const firstTile = board[0]?.[0];
       if (firstTile !== undefined && firstTile.value !== 0) {
         board = setTile(board, { row: 0 as Row, col: 1 as Col }, { value: firstTile.value, retired: false });
       }
       break;
     }
-  } while (true);
+  }
 
   return {
     board,
@@ -165,7 +164,7 @@ export function createGame(config: GameConfig): GameState {
  */
 export function validateChain(
   board: Board,
-  chain: ReadonlyArray<Cell>
+  chain: readonly Cell[]
 ): { valid: boolean; reason?: string } {
   const rows = board.length;
   const cols = board[0]?.length ?? 0;
@@ -276,7 +275,7 @@ export function hasLegalChainStart(board: Board): boolean {
  */
 export function computeChainResult(
   board: Board,
-  chain: ReadonlyArray<Cell>,
+  chain: readonly Cell[],
   config: GameConfig
 ): TileValue {
   const { resultValue } = resolveChain(board, chain, config);
@@ -352,17 +351,11 @@ export function applyAction(state: GameState, action: Action): GameState {
       // Update maxTileEver
       const newMaxTileEver = (
         resultValue > state.maxTileEver ? resultValue : state.maxTileEver
-      ) as TileValue;
+      );
 
-      // Check retirement (stub — always returns null in Phase 1)
-      // We call it inside a try/catch so the stub error doesn't break Phase 1
-      // Per spec: retirement is a stub, always returns null for now
-      // We skip the call entirely in Phase 1 to avoid throwing
-      const retirementFired = null; // checkRetirement would go here in Phase 4
-
-      // Determine new spawn pool (unchanged in Phase 1)
-      const newSpawnPoolMin = retirementFired !== null ? state.spawnPoolMin : state.spawnPoolMin;
-      const newSpawnPoolMax = retirementFired !== null ? state.spawnPoolMax : state.spawnPoolMax;
+      // Retirement stub — checkRetirement goes here in Phase 4
+      const newSpawnPoolMin = state.spawnPoolMin;
+      const newSpawnPoolMax = state.spawnPoolMax;
 
       // Check loss condition
       const legalStart = hasLegalChainStart(board);

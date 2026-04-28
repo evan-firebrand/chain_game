@@ -29,7 +29,7 @@ export function setTile(board: Board, cell: Cell, tile: Tile): Board {
 /**
  * Remove tiles at the given cells, returning a new board with those cells empty.
  */
-export function removeTiles(board: Board, cells: ReadonlyArray<Cell>): Board {
+export function removeTiles(board: Board, cells: readonly Cell[]): Board {
   const cellSet = new Set(cells.map(c => `${c.row},${c.col}`));
   return board.map((rowArr, r) =>
     rowArr.map((tile, c) =>
@@ -83,7 +83,7 @@ function pickTileValue(
   rand: number
 ): TileValue {
   // Build list of (value, weight) pairs for values in [spawnPoolMin, spawnPoolMax]
-  const entries: Array<[TileValue, number]> = [];
+  const entries: [TileValue, number][] = [];
   let totalWeight = 0;
 
   let v = config.spawnPoolMin;
@@ -96,8 +96,8 @@ function pickTileValue(
     v = (v * 2) as TileValue;
   }
 
+  /* v8 ignore next 3 */
   if (totalWeight === 0 || entries.length === 0) {
-    // Fallback: return spawnPoolMin
     return config.spawnPoolMin;
   }
 
@@ -109,7 +109,7 @@ function pickTileValue(
     }
   }
 
-  // Fallback: last entry
+  /* v8 ignore next 2 */
   const last = entries[entries.length - 1];
   return last !== undefined ? last[0] : config.spawnPoolMin;
 }
@@ -144,14 +144,15 @@ export function spawnTiles(
   chainLength: number,
   config: GameConfig,
   prngState: number
-): { board: Board; prngState: number; spawned: Array<{ cell: Cell; value: TileValue }> } {
+): { board: Board; prngState: number; spawned: { cell: Cell; value: TileValue }[] } {
   const spawnCount = chainLength - 1;
+  /* v8 ignore next 3 */
   if (spawnCount <= 0) {
     return { board, prngState, spawned: [] };
   }
 
   const emptyCells = findEmptyCells(board);
-  const spawned: Array<{ cell: Cell; value: TileValue }> = [];
+  const spawned: { cell: Cell; value: TileValue }[] = [];
   let currentBoard = board;
   let currentPrng = prngState;
 

@@ -18,7 +18,7 @@ export class GameSession {
   dispatch(action: Action): void {
     const prevCount = this.state.events.length;
     this.state = applyAction(this.state, action);
-    const newKernelEvents = this.state.events.slice(prevCount) as ReadonlyArray<GameEvent>;
+    const newKernelEvents = this.state.events.slice(prevCount) as readonly GameEvent[];
     this._emit(newKernelEvents);
   }
 
@@ -29,7 +29,7 @@ export class GameSession {
     };
   }
 
-  private _emit(kernelEvents: ReadonlyArray<GameEvent>): void {
+  private _emit(kernelEvents: readonly GameEvent[]): void {
     const event: SessionEvent = {
       type: 'state-changed',
       state: this.state,

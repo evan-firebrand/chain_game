@@ -97,7 +97,7 @@ function roundRect(
 
 export interface RenderState {
   board: Board;
-  chain: ReadonlyArray<Cell>;
+  chain: readonly Cell[];
   previewValue: TileValue | null;
   /** Cells that could validly extend the current chain (highlighted for player). */
   validExtensions: ReadonlySet<string>;
@@ -164,7 +164,7 @@ export function renderBoard(ctx: CanvasRenderingContext2D, s: RenderState): void
       ctx.fillText(String(tile.value), x + TILE / 2, y + TILE / 2);
 
       // Preview result badge on last chain cell
-      if (isLast && previewValue !== null && previewValue !== undefined) {
+      if (isLast && previewValue !== null) {
         const bx = x + TILE - 28;
         const by = y + 4;
         ctx.fillStyle = 'rgba(0,0,0,0.75)';
@@ -202,7 +202,7 @@ function darken(hex: string, amount: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
-  const clamp = (v: number) => Math.max(0, Math.round(v * (1 - amount)));
+  const clamp = (v: number): number => Math.max(0, Math.round(v * (1 - amount)));
   return `rgb(${clamp(r)},${clamp(g)},${clamp(b)})`;
 }
 
@@ -211,6 +211,6 @@ function lighten(hex: string, amount: number): string {
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
-  const clamp = (v: number) => Math.min(255, Math.round(v + (255 - v) * amount));
+  const clamp = (v: number): number => Math.min(255, Math.round(v + (255 - v) * amount));
   return `rgb(${clamp(r)},${clamp(g)},${clamp(b)})`;
 }

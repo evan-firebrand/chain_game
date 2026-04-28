@@ -25,7 +25,7 @@ export interface Tile {
  * 2D grid: board[row][col]. Row 0 is the top row.
  * A cell with value 0 is empty.
  */
-export type Board = ReadonlyArray<ReadonlyArray<Tile>>;
+export type Board = readonly (readonly Tile[])[];
 
 // ─── Game Config ───────────────────────────────────────────────────────────
 
@@ -69,7 +69,7 @@ export interface GameState {
   /** PRNG state at this moment — deterministic, restorable. */
   readonly prngState: number;
   /** Accumulated event log for this game (used by sim harness). */
-  readonly events: ReadonlyArray<GameEvent>;
+  readonly events: readonly GameEvent[];
 }
 
 // ─── Actions ───────────────────────────────────────────────────────────────
@@ -79,7 +79,7 @@ export type ActionKind = 'commit-chain' | 'new-game';
 export interface CommitChainAction {
   readonly kind: 'commit-chain';
   /** Ordered list of cells in the chain, start to end. Minimum length: 2. */
-  readonly chain: ReadonlyArray<Cell>;
+  readonly chain: readonly Cell[];
 }
 
 export interface NewGameAction {
@@ -93,7 +93,7 @@ export type Action = CommitChainAction | NewGameAction;
 
 export interface ChainResolvedEvent {
   readonly kind: 'chain-resolved';
-  readonly chain: ReadonlyArray<Cell>;
+  readonly chain: readonly Cell[];
   readonly resultValue: TileValue;
   readonly resultCell: Cell;
   readonly sameExtensions: number;
@@ -102,7 +102,7 @@ export interface ChainResolvedEvent {
 
 export interface TilesSpawnedEvent {
   readonly kind: 'tiles-spawned';
-  readonly spawned: ReadonlyArray<{ cell: Cell; value: TileValue }>;
+  readonly spawned: readonly { cell: Cell; value: TileValue }[];
 }
 
 export interface RetirementFiredEvent {

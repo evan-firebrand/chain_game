@@ -2,11 +2,11 @@ import type { Cell } from '../game-session/index.js';
 import { pixelToCell } from './board.js';
 
 export interface InputCallbacks {
-  onChainUpdate: (chain: ReadonlyArray<Cell>) => void;
-  onChainCommit: (chain: ReadonlyArray<Cell>) => void;
+  onChainUpdate: (chain: readonly Cell[]) => void;
+  onChainCommit: (chain: readonly Cell[]) => void;
   onChainCancel: () => void;
   /** Return true if appending `cell` to `chain` would be a legal move. */
-  canExtend: (chain: ReadonlyArray<Cell>, cell: Cell) => boolean;
+  canExtend: (chain: readonly Cell[], cell: Cell) => boolean;
 }
 
 function isAdjacent(a: Cell, b: Cell): boolean {

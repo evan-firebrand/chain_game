@@ -16,7 +16,7 @@ function emptyTile(): Tile {
 /**
  * Build a 7x6 board. Unlisted cells are empty (value=0).
  */
-function makeBoard(cells: Array<{ row: number; col: number; value: number }>): Board {
+function makeBoard(cells: { row: number; col: number; value: number }[]): Board {
   const grid: Tile[][] = Array.from({ length: ROWS }, () =>
     Array.from({ length: COLS }, () => emptyTile())
   );

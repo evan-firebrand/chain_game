@@ -48,7 +48,7 @@ export function validateChainExtension(
  */
 export function resolveChain(
   board: Board,
-  chain: ReadonlyArray<Cell>,
+  chain: readonly Cell[],
   config: Pick<GameConfig, 'ruleK'>
 ): { resultValue: ReturnType<typeof computeResultValue>; sameExtensions: number; doublingExtensions: number } {
   let sameExtensions = 0;
@@ -77,10 +77,12 @@ export function resolveChain(
   }
 
   const lastCell = chain[chain.length - 1];
+  /* v8 ignore next 3 */
   if (lastCell === undefined) {
     throw new Error('resolveChain: empty chain');
   }
   const lastTile = board[lastCell.row]?.[lastCell.col];
+  /* v8 ignore next 3 */
   if (lastTile === undefined) {
     throw new Error('resolveChain: last cell out of bounds');
   }

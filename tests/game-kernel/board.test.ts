@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createGame, applyAction, validateChain } from '../../src/game-kernel/index.js';
-import type { Board, GameConfig, GameState, Tile, TileValue, Cell, CommitChainAction } from '../../src/game-kernel/types.js';
+import type { Board, GameConfig, GameState, Tile, TileValue, Cell, CommitChainAction, TilesSpawnedEvent } from '../../src/game-kernel/types.js';
 
 // applyGravity is an internal module — tested indirectly through createGame
 // and through the exported applyAction path. The spec only exports public API
@@ -83,7 +83,7 @@ describe('applyGravity (via applyAction)', () => {
       // Not exported — skip direct test
       return;
     }
-    const applyGravity = (KernelAPI as Record<string, unknown>)['applyGravity'] as (
+    const applyGravity = (KernelAPI as Record<string, unknown>).applyGravity as (
       board: Board
     ) => Board;
 
@@ -109,7 +109,7 @@ describe('applyGravity (via applyAction)', () => {
 
   it('applyGravity: columns are independent', () => {
     if (!('applyGravity' in KernelAPI)) return;
-    const applyGravity = (KernelAPI as Record<string, unknown>)['applyGravity'] as (
+    const applyGravity = (KernelAPI as Record<string, unknown>).applyGravity as (
       board: Board
     ) => Board;
 
@@ -139,7 +139,7 @@ describe('applyGravity (via applyAction)', () => {
 
   it('applyGravity: already-settled board is unchanged', () => {
     if (!('applyGravity' in KernelAPI)) return;
-    const applyGravity = (KernelAPI as Record<string, unknown>)['applyGravity'] as (
+    const applyGravity = (KernelAPI as Record<string, unknown>).applyGravity as (
       board: Board
     ) => Board;
 
@@ -300,8 +300,7 @@ describe('spawnTiles (via applyAction)', () => {
     expect(chain).not.toBeNull();
     const action: CommitChainAction = { kind: 'commit-chain', chain: chain! };
     const next = applyAction(state, action);
-    const spawnEv = next.events.find(e => e.kind === 'tiles-spawned') as
-      Extract<typeof next.events[0], { kind: 'tiles-spawned' }> | undefined;
+    const spawnEv = next.events.find((e): e is TilesSpawnedEvent => e.kind === 'tiles-spawned');
     expect(spawnEv).toBeDefined();
     expect(spawnEv!.spawned).toHaveLength(1);
   });
@@ -312,8 +311,7 @@ describe('spawnTiles (via applyAction)', () => {
     expect(chain).not.toBeNull();
     const action: CommitChainAction = { kind: 'commit-chain', chain: chain! };
     const next = applyAction(state, action);
-    const spawnEv = next.events.find(e => e.kind === 'tiles-spawned') as
-      Extract<typeof next.events[0], { kind: 'tiles-spawned' }> | undefined;
+    const spawnEv = next.events.find((e): e is TilesSpawnedEvent => e.kind === 'tiles-spawned');
     expect(spawnEv).toBeDefined();
     expect(spawnEv!.spawned).toHaveLength(2);
   });
@@ -324,7 +322,7 @@ describe('spawnTiles (via applyAction)', () => {
     expect(chain).not.toBeNull();
     const action: CommitChainAction = { kind: 'commit-chain', chain: chain! };
     const next = applyAction(state, action);
-    const spawnEv = next.events.find(e => e.kind === 'tiles-spawned') as any;
+    const spawnEv = next.events.find((e): e is TilesSpawnedEvent => e.kind === 'tiles-spawned');
     const validPool = new Set([2, 4, 8, 16, 32, 64, 128, 256]);
     for (const { value } of spawnEv!.spawned) {
       expect(validPool.has(value)).toBe(true);
@@ -339,8 +337,8 @@ describe('spawnTiles (via applyAction)', () => {
     const action: CommitChainAction = { kind: 'commit-chain', chain: chain! };
     const nextA = applyAction(stateA, action);
     const nextB = applyAction(stateB, action);
-    const spawnA = nextA.events.find(e => e.kind === 'tiles-spawned') as any;
-    const spawnB = nextB.events.find(e => e.kind === 'tiles-spawned') as any;
+    const spawnA = nextA.events.find((e): e is TilesSpawnedEvent => e.kind === 'tiles-spawned');
+    const spawnB = nextB.events.find((e): e is TilesSpawnedEvent => e.kind === 'tiles-spawned');
     expect(spawnA!.spawned).toEqual(spawnB!.spawned);
     expect(nextA.prngState).toBe(nextB.prngState);
   });

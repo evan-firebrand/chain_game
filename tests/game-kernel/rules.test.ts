@@ -15,7 +15,7 @@ const DEFAULT_CONFIG: GameConfig = {
 /**
  * Build a 7x6 board. Cells not listed default to value=0, retired=false.
  */
-function makeBoard(cells: Array<{ row: number; col: number; value: number }>): Board {
+function makeBoard(cells: { row: number; col: number; value: number }[]): Board {
   const rows = DEFAULT_CONFIG.gridRows;
   const cols = DEFAULT_CONFIG.gridCols;
 
@@ -38,7 +38,7 @@ function chainFromValues(values: number[]): { board: Board; chain: Cell[] } {
   const cells = values.map((value, col) => ({ row: 0, col, value }));
   const board = makeBoard(cells);
   const chain: Cell[] = values.map((_, col) => ({
-    row: 0 as 0,
+    row: 0 as const,
     col: col as 0 | 1 | 2 | 3 | 4 | 5,
   }));
   return { board, chain };
@@ -93,7 +93,7 @@ describe('computeChainResult — mandatory T1-T8b spec vectors', () => {
 
 describe('computeChainResult — property tests', () => {
   it('always returns a power of 2', () => {
-    const isPowerOf2 = (n: number) => n > 0 && (n & (n - 1)) === 0;
+    const isPowerOf2 = (n: number): boolean => n > 0 && (n & (n - 1)) === 0;
 
     const testCases: number[][] = [
       [2, 2],

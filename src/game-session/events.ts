@@ -5,7 +5,7 @@ export interface SessionEvent {
   readonly state: GameState;
   readonly config: GameConfig;
   readonly turn: number;
-  readonly kernelEvents: ReadonlyArray<GameEvent>;
+  readonly kernelEvents: readonly GameEvent[];
 }
 
 export type SessionEventListener = (event: SessionEvent) => void;
