@@ -1,0 +1,194 @@
+# Chain Game — Agent Orientation
+
+**Read this file at the start of every session. It is the source of truth for how this project works.**
+
+---
+
+## Project in One Sentence
+
+Chain Game is a browser-based 2D number-merging puzzle game with a path-chain mechanic; the design is complete and the engineering team is now building it in phases, starting with the pure game-logic kernel.
+
+**Current phase:** Phase 0 (Foundation) — contracts and scaffolding. No game logic is implemented yet.
+
+---
+
+## The Prime Directive
+
+> **All game logic lives in `src/game-kernel/` and nowhere else.**
+
+Chain validation, chain resolution, Rule D k=2 math, gravity, spawn tile selection, retirement trigger detection, loss condition detection — every rule of the game is implemented as a pure function inside `game-kernel`. Any pull request that computes game logic outside `game-kernel` is automatically rejected, no exceptions.
+
+---
+
+## Folder Map
+
+```
+chain-game/
+├── CLAUDE.md                             ← you are here (read every session)
+├── index.html                            ← browser entry point
+├── package.json
+├── tsconfig.json
+├── vitest.config.ts
+├── .eslintrc.json
+│
+├── docs/
+│   ├── Game_Design_Concepts.md           ← EVAN-ONLY WRITES (design vocabulary)
+│   ├── Merge_Game_Specification.md       ← EVAN-ONLY WRITES (current game contract)
+│   ├── Merge_Game_Design_Journal.md      ← EVAN-ONLY WRITES (decision log)
+│   ├── Merge_Game_Tooling_Specification.md ← EVAN-ONLY WRITES
+│   ├── Merge_Game_Tooling_Journal.md     ← EVAN-ONLY WRITES
+│   ├── swarm_framework.md                ← EVAN-ONLY WRITES (multi-agent ideation)
+│   ├── swarm_prompts.md                  ← EVAN-ONLY WRITES (agent prompt templates)
+│   └── engineering/                      ← Architecture Agent writes; Evan approves
+│       ├── ARCHITECTURE.md               ← module diagram + dependency rules
+│       ├── KERNEL_INTERFACE.md           ← TypeScript interface contracts (load-bearing)
+│       ├── FOLDER_STRUCTURE.md           ← canonical path map with ownership
+│       ├── PARAMETER_TIERS.md            ← which parameters are Tier 1/2/3
+│       ├── SIM_HARNESS_SCHEMA.md         ← simulation output schema
+│       ├── RETIREMENT_DESIGN_NOTES.md    ← created when Phase 4 lands
+│       ├── session-briefs/               ← per-agent task context files
+│       ├── playtests/                    ← Evan's playtest notes
+│       └── adr/                          ← Architecture Decision Records
+│           ├── 0000-tech-stack.md
+│           └── 0001-pure-kernel-module.md
+│
+├── src/
+│   ├── game-kernel/          ← Game Logic Agent owns
+│   │   ├── index.ts          ← PUBLIC API ONLY (re-exports, no logic here)
+│   │   ├── types.ts          ← ALL GameState / Action / Config types
+│   │   ├── chain.ts          ← chain validation + resolution
+│   │   ├── board.ts          ← grid ops, gravity, tile spawn
+│   │   ├── rules.ts          ← Rule D k=2 implementation
+│   │   └── retirement.ts     ← stub in Phase 1; fully implemented in Phase 4
+│   │
+│   ├── game-session/         ← Game Logic Agent owns
+│   │   ├── session.ts        ← wraps kernel calls, maintains session state, emits events
+│   │   └── events.ts         ← event type definitions
+│   │
+│   ├── ui/                   ← UI Agent owns
+│   │   ├── app.ts
+│   │   ├── board.ts
+│   │   ├── input.ts          ← MUST be a distinct module (swappable mouse/touch)
+│   │   └── hud.ts
+│   │
+│   ├── tuning-console/       ← UI Agent owns
+│   │   ├── console.ts
+│   │   ├── controls.ts
+│   │   └── config-export.ts
+│   │
+│   └── sim-harness/          ← Simulation Agent owns
+│       ├── runner.ts
+│       ├── sweep.ts
+│       ├── analyzer.ts
+│       ├── types.ts
+│       └── strategies/
+│           ├── random.ts
+│           ├── greedy.ts
+│           └── heuristic.ts
+│
+└── tests/                    ← Test Agent owns
+    ├── game-kernel/
+    ├── game-session/
+    └── sim-harness/
+```
+
+---
+
+## Module Dependency Rules (enforced by CI)
+
+```
+sim-harness ──→ game-kernel ←── game-session ←── ui
+                                              ←── tuning-console
+```
+
+**DO:**
+- `game-session` imports from `game-kernel`
+- `ui` imports from `game-session`
+- `tuning-console` imports from `game-session`
+- `sim-harness` imports from `game-kernel`
+
+**DO NOT:**
+- `game-kernel` imports from anywhere in `src/` — it is self-contained
+- `ui` imports from `game-kernel` directly — always go through `game-session`
+- `sim-harness` imports from `game-session` or `ui`
+- Tests cross module boundaries (each test file imports only from its own module)
+
+CI runs a dependency boundary check on every push. Violations are build failures.
+
+---
+
+## Where the Game Spec Lives
+
+| What you need | Where to find it |
+|---|---|
+| Game rules (chain mechanic, result formula, retirement) | `docs/Merge_Game_Specification.md` |
+| Design decisions and rationale | `docs/Merge_Game_Design_Journal.md` |
+| T1-T8b mandatory test vectors | `docs/Merge_Game_Design_Journal.md` §chain examples |
+| TypeScript interface contracts | `docs/engineering/KERNEL_INTERFACE.md` |
+| Module diagram and ownership | `docs/engineering/ARCHITECTURE.md` |
+| Parameter tier assignments | `docs/engineering/PARAMETER_TIERS.md` |
+| Sim harness output schema | `docs/engineering/SIM_HARNESS_SCHEMA.md` |
+
+---
+
+## What Requires Evan's Approval (do not proceed without it)
+
+1. Any edit to files in top-level `docs/` (the 7 design docs)
+2. Any change to `game-kernel/index.ts` public API
+3. Adding a Tier 1 parameter to the Tuning Console
+4. Any merge to `main`
+5. Any new Architecture Decision Record (ADR)
+6. The sim harness output schema (`SIM_HARNESS_SCHEMA.md`)
+7. Any new dependency in `package.json`
+
+---
+
+## Design Gap Protocol
+
+When you hit an ambiguity not covered by the spec:
+
+1. **Stop. Do not invent a resolution and proceed.**
+2. File a GitHub issue labeled `design-question` with: file/line location, the ambiguity, 2-3 options with tradeoffs.
+3. If blocked and Evan is unavailable: implement the most conservative option (closest to what the spec already says) and add a `// TODO(design-question: #NNN)` comment.
+4. When Evan answers: update the code, file an ADR if the decision affects module boundaries or APIs.
+
+**Known gaps agents will encounter:**
+- `[2,2]` chain of length 1 after a retirement — chain-start still valid?
+- L−1 spawn when L=1 — does that mean 0 spawns, or a minimum of 1?
+- "Last position" in a chain that revisits a column — which cell is "last"?
+- Gravity: when multiple columns drop simultaneously, is order defined?
+
+---
+
+## Current Phase and Gate Status
+
+**Phase 0 — Project Foundation**
+
+Gate criteria (all must pass before Phase 1 begins):
+- [ ] `CLAUDE.md` merged to `main`, Evan-approved
+- [ ] `KERNEL_INTERFACE.md` merged to `main`, Evan-approved
+- [ ] Folder skeleton exists (empty dirs + README stubs, no logic)
+- [ ] CI passing on scaffolded repo
+
+**Phase 1 — game-kernel** (next phase, not started)
+
+See `docs/engineering/ARCHITECTURE.md` for full phase sequence.
+
+---
+
+## Recent ADRs
+
+| # | Title | Status | Date |
+|---|---|---|---|
+| 0000 | Tech Stack | Accepted | 2026-04-28 |
+| 0001 | Pure Kernel Module | Accepted | 2026-04-28 |
+
+---
+
+## Code Rules (summary — full detail in `docs/engineering/ARCHITECTURE.md`)
+
+- TypeScript `strict: true`. No `any`. All exported functions have explicit return types.
+- `game-kernel` functions are pure: no side effects, no `Math.random()`, no `Date.now()`, no `console.log()`. All randomness via seeded PRNG passed in config.
+- `GameState` is an immutable value object. Functions return new state; they never mutate.
+- Comments only when WHY is non-obvious. Never explain what the code does.
+- Commit format: `<type>(<scope>): <description>` — types: `feat fix test docs refactor arch` — scopes: `kernel session ui console harness tests docs ci`
