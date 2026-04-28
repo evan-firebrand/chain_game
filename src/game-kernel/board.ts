@@ -1,4 +1,5 @@
 import type { Board, Cell, Tile, TileValue, GameConfig, Row, Col } from './types.js';
+import { forEachTileValueInRange, previousTileValue } from './values.js';
 
 /**
  * Simple seeded LCG (Linear Congruential Generator).
@@ -87,20 +88,18 @@ function pickTileValue(
   const entries: [TileValue, number][] = [];
   let totalWeight = 0;
 
-  let v = config.spawnPoolMin;
-  while (v <= config.spawnPoolMax) {
+  forEachTileValueInRange(config.spawnPoolMin, config.spawnPoolMax, v => {
     /* v8 ignore next 1 */
     const configuredWeight = config.spawnWeights[v];
-    const previousTier = (v / 2) as TileValue;
+    const previousTier = previousTileValue(v);
     const weight = configuredWeight ?? (
-      v === config.spawnPoolMax ? (config.spawnWeights[previousTier] ?? 1) / 2 : 0
+      v === config.spawnPoolMax ? (config.spawnWeights[previousTier ?? 0] ?? 1) / 2 : 0
     );
     if (weight > 0) {
       entries.push([v, weight]);
       totalWeight += weight;
     }
-    v = (v * 2) as TileValue;
-  }
+  });
 
   /* v8 ignore next 3 */
   if (totalWeight === 0 || entries.length === 0) {

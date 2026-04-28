@@ -17,6 +17,7 @@ import type {
 import { applyGravity, setTile, removeTiles, spawnTiles } from './board.js';
 import { getAdjacentCells, validateChainExtension, resolveChain } from './chain.js';
 import { checkRetirement, advanceSpawnPool, markRetiredTiles } from './retirement.js';
+import { forEachTileValueInRange, previousTileValue } from './values.js';
 
 // Re-export public types
 export type {
@@ -42,6 +43,16 @@ export type {
 
 export { DEFAULT_CONFIG } from './types.js';
 export { computeResultValue } from './rules.js';
+export {
+  EMPTY_TILE_VALUE,
+  MIN_TILE_VALUE,
+  isTileValue,
+  isPlayableTileValue,
+  nextTileValue,
+  previousTileValue,
+  tileValueStepsBelow,
+  forEachTileValueInRange,
+} from './values.js';
 export { getAdjacentCells, validateChainExtension, resolveChain } from './chain.js';
 export { applyGravity, setTile, removeTiles, spawnTiles } from './board.js';
 
@@ -62,19 +73,17 @@ function pickTileValue(
   const entries: [TileValue, number][] = [];
   let totalWeight = 0;
 
-  let v = config.spawnPoolMin;
-  while (v <= config.spawnPoolMax) {
+  forEachTileValueInRange(config.spawnPoolMin, config.spawnPoolMax, v => {
     const configuredWeight = config.spawnWeights[v];
-    const previousTier = (v / 2) as TileValue;
+    const previousTier = previousTileValue(v);
     const weight = configuredWeight ?? (
-      v === config.spawnPoolMax ? (config.spawnWeights[previousTier] ?? 1) / 2 : 0
+      v === config.spawnPoolMax ? (config.spawnWeights[previousTier ?? 0] ?? 1) / 2 : 0
     );
     if (weight > 0) {
       entries.push([v, weight]);
       totalWeight += weight;
     }
-    v = (v * 2) as TileValue;
-  }
+  });
 
   if (totalWeight === 0 || entries.length === 0) {
     return config.spawnPoolMin;

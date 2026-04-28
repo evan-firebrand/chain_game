@@ -1,8 +1,5 @@
 import type { GameConfig, TileValue } from '../game-session/index.js';
-
-const VALID_TIER_VALUES: readonly TileValue[] = [
-  2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192,
-];
+import { isPlayableTileValue, nextTileValue } from '../game-session/index.js';
 
 export class ConfigImportError extends Error {
   readonly field: string | undefined;
@@ -83,9 +80,9 @@ function expectFiniteNumber(obj: Record<string, unknown>, field: string): number
 
 function expectTileValue(obj: Record<string, unknown>, field: string): TileValue {
   const v = obj[field];
-  if (typeof v !== 'number' || !VALID_TIER_VALUES.includes(v as TileValue)) {
+  if (typeof v !== 'number' || !isPlayableTileValue(v)) {
     throw new ConfigImportError(
-      `Field "${field}" must be a valid TileValue (power of 2 in [2, 8192])`,
+      `Field "${field}" must be a valid TileValue (power of 2 >= 2)`,
       field
     );
   }
@@ -105,7 +102,7 @@ function expectSpawnWeights(
   const result: Partial<Record<TileValue, number>> = {};
 
   // Every power-of-2 in [min, max] must have a non-negative numeric weight.
-  for (let v = min; v <= max; v = (v * 2) as TileValue) {
+  for (let v: TileValue | null = min; v !== null && v <= max; v = nextTileValue(v)) {
     const w = weights[String(v)];
     if (typeof w !== 'number' || !Number.isFinite(w) || w < 0) {
       throw new ConfigImportError(
@@ -118,7 +115,7 @@ function expectSpawnWeights(
   // Extras outside [min, max] are allowed (preserved if numeric and >= 0).
   for (const [k, w] of Object.entries(weights)) {
     const tv = Number(k) as TileValue;
-    if (!VALID_TIER_VALUES.includes(tv)) continue;
+    if (!isPlayableTileValue(tv)) continue;
     if (tv < min || tv > max) {
       if (typeof w === 'number' && Number.isFinite(w) && w >= 0) {
         result[tv] = w;

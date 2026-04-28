@@ -110,8 +110,8 @@ describe('checkRetirement', () => {
     expect(checkRetirement(4 as TileValue, 2 as TileValue)).toBeNull();
   });
 
-  it('does not fire beyond the supported tile value range', () => {
-    expect(checkRetirement(8192 as TileValue, 8192 as TileValue)).toBeNull();
+  it('continues retirement beyond the original early tile value range', () => {
+    expect(checkRetirement(16384 as TileValue, 8192 as TileValue)).toBe(64);
   });
 
   it('treats an invalid runtime ceiling as non-retiring', () => {
@@ -151,16 +151,16 @@ describe('advanceSpawnPool', () => {
     expect(advanced.spawnWeights[512]).toBe(0.5);
   });
 
-  it('falls back unchanged when the pool cannot advance further', () => {
+  it('advances beyond the original early tile value range', () => {
     const maxedConfig: GameConfig = {
       ...CONFIG,
       spawnPoolMin: 1024 as TileValue,
       spawnPoolMax: 8192 as TileValue,
     };
     expect(advanceSpawnPool(maxedConfig, 8192 as TileValue)).toEqual({
-      spawnPoolMin: 1024,
-      spawnPoolMax: 8192,
-      spawnWeights: maxedConfig.spawnWeights,
+      spawnPoolMin: 16384,
+      spawnPoolMax: 16384,
+      spawnWeights: { ...maxedConfig.spawnWeights, 16384: 0.5 },
     });
   });
 });

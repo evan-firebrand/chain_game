@@ -14,6 +14,8 @@ export {
   hasLegalChainStart,
   getAdjacentCells,
   validateChainExtension,
+  isPlayableTileValue,
+  nextTileValue,
 } from '../game-kernel/index.js';
 
 export { GameSession } from './session.js';

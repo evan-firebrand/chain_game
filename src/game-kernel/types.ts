@@ -1,7 +1,7 @@
 // ─── Value types ───────────────────────────────────────────────────────────
 
-/** Powers of 2 on the board. 0 = empty cell. */
-export type TileValue = 0 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512 | 1024 | 2048 | 4096 | 8192;
+/** Powers of 2 on the board. 0 = empty cell. Runtime helpers validate playable values. */
+export type TileValue = number;
 
 export type Row = 0 | 1 | 2 | 3 | 4 | 5 | 6;      // 0 = top
 export type Col = 0 | 1 | 2 | 3 | 4 | 5;           // 0 = left

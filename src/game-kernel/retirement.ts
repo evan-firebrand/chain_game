@@ -1,27 +1,5 @@
 import type { Board, GameConfig, TileValue } from './types.js';
-
-const TILE_VALUES: readonly TileValue[] = [
-  2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192,
-];
-
-function nextTileValue(value: TileValue): TileValue | null {
-  const next = (value * 2) as TileValue;
-  return TILE_VALUES.includes(next) ? next : null;
-}
-
-function previousTileValue(value: TileValue): TileValue | null {
-  const previous = (value / 2) as TileValue;
-  return TILE_VALUES.includes(previous) ? previous : null;
-}
-
-function tierSevenStepsBelow(value: TileValue): TileValue | null {
-  let current: TileValue | null = value;
-  for (let i = 0; i < 7; i++) {
-    if (current === null) return null;
-    current = previousTileValue(current);
-  }
-  return current;
-}
+import { nextTileValue, tileValueStepsBelow } from './values.js';
 
 /**
  * Check whether a retirement should fire given the current max tile ever reached.
@@ -35,7 +13,7 @@ export function checkRetirement(
   if (triggerTier === null || maxTileEver < triggerTier) {
     return null;
   }
-  return tierSevenStepsBelow(currentSpawnPoolMax);
+  return tileValueStepsBelow(currentSpawnPoolMax, 7);
 }
 
 /**
