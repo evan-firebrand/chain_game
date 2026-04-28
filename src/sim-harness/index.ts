@@ -5,10 +5,21 @@ export { randomStrategy } from './strategies/random.js';
 export { greedyStrategy } from './strategies/greedy.js';
 export { heuristicStrategy } from './strategies/heuristic.js';
 export {
+  longGreedyWalkStrategy,
+  longRandomWalkStrategy,
+  milestonePushStrategy,
+  preRetirementCleanupStrategy,
+  strategicHumanLikeStrategy,
+} from './strategies/long-chain.js';
+export {
+  buildConstructiveChain,
+  candidateFromChain,
   countIsolatedRetiredTiles,
   countLegalChainStarts,
   countRetiredTiles,
   enumerateCandidateChains,
+  findLegalChainStarts,
+  legalExtensionsForChain,
   toDecision,
 } from './strategies/common.js';
 export type {

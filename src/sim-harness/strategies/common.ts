@@ -24,11 +24,17 @@ export interface CandidateChain {
   readonly resultValue: TileValue;
 }
 
-function cellKey(cell: Cell): string {
+export type ExtensionPicker = (
+  state: GameState,
+  chain: readonly Cell[],
+  extensions: readonly Cell[]
+) => Cell | null;
+
+export function cellKey(cell: Cell): string {
   return `${cell.row},${cell.col}`;
 }
 
-function compareCell(a: Cell, b: Cell): number {
+export function compareCell(a: Cell, b: Cell): number {
   return a.row === b.row ? a.col - b.col : a.row - b.row;
 }
 
@@ -158,6 +164,74 @@ export function enumerateCandidateChains(
   }
 
   return candidates.sort((a, b) => compareChains(a.chain, b.chain));
+}
+
+export function findLegalChainStarts(state: GameState): readonly (readonly [Cell, Cell])[] {
+  const { board } = state;
+  const rows = board.length;
+  const cols = board[0]?.length ?? 0;
+  const starts: (readonly [Cell, Cell])[] = [];
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const tile = board[r]?.[c];
+      if (tile === undefined || tile.value === 0) continue;
+
+      const start = { row: r as Row, col: c as Col };
+      for (const neighbor of getAdjacentCells(start, rows, cols).sort(compareCell)) {
+        const chain = [start, neighbor] as const;
+        if (validateChain(board, chain).valid) {
+          starts.push(chain);
+        }
+      }
+    }
+  }
+
+  return starts;
+}
+
+export function legalExtensionsForChain(
+  state: GameState,
+  chain: readonly Cell[]
+): readonly Cell[] {
+  const last = chain[chain.length - 1];
+  if (last === undefined) return [];
+
+  const used = new Set(chain.map(cellKey));
+  const rows = state.board.length;
+  const cols = state.board[0]?.length ?? 0;
+  return getAdjacentCells(last, rows, cols)
+    .filter(cell => !used.has(cellKey(cell)))
+    .filter(cell => validateChain(state.board, [...chain, cell]).valid)
+    .sort(compareCell);
+}
+
+export function candidateFromChain(state: GameState, chain: readonly Cell[]): CandidateChain {
+  return {
+    chain: [...chain],
+    resultValue: computeChainResult(state.board, chain, state.config),
+  };
+}
+
+export function buildConstructiveChain(
+  state: GameState,
+  start: readonly [Cell, Cell],
+  maxLength: number,
+  picker: ExtensionPicker
+): CandidateChain {
+  const chain: Cell[] = [...start];
+  const cappedMax = Math.max(2, Math.min(maxLength, state.board.length * (state.board[0]?.length ?? 0)));
+
+  while (chain.length < cappedMax) {
+    const extensions = legalExtensionsForChain(state, chain);
+    if (extensions.length === 0) break;
+
+    const next = picker(state, chain, extensions);
+    if (next === null) break;
+    chain.push(next);
+  }
+
+  return candidateFromChain(state, chain);
 }
 
 export function toCommitAction(candidate: CandidateChain): CommitChainAction {
