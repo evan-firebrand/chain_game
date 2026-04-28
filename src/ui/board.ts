@@ -1,4 +1,4 @@
-import type { Board, Cell, TileValue } from '../game-kernel/index.js';
+import type { Board, Cell, TileValue } from '../game-session/index.js';
 
 export const TILE = 76;
 export const GAP = 4;
@@ -92,12 +92,14 @@ export interface RenderState {
   board: Board;
   chain: ReadonlyArray<Cell>;
   previewValue: TileValue | null;
+  /** Cells that could validly extend the current chain (highlighted for player). */
+  validExtensions: ReadonlySet<string>;
   rows: number;
   cols: number;
 }
 
 export function renderBoard(ctx: CanvasRenderingContext2D, s: RenderState): void {
-  const { board, chain, previewValue, rows, cols } = s;
+  const { board, chain, previewValue, validExtensions, rows, cols } = s;
 
   const chainSet = new Set(chain.map(c => `${c.row},${c.col}`));
   const lastCell = chain[chain.length - 1];
@@ -114,6 +116,7 @@ export function renderBoard(ctx: CanvasRenderingContext2D, s: RenderState): void
       const key = `${r},${c}`;
       const inChain = chainSet.has(key);
       const isLast = lastCell !== undefined && lastCell.row === r && lastCell.col === c;
+      const isValidNext = validExtensions.has(key);
 
       if (tile.value === 0) {
         // Empty cell
@@ -123,16 +126,25 @@ export function renderBoard(ctx: CanvasRenderingContext2D, s: RenderState): void
         continue;
       }
 
-      // Tile background
+      // Tile background — dim tiles that can't extend the active chain
+      const hasActiveChain = chainSet.size > 0;
       const color = tileColor(tile.value);
-      ctx.fillStyle = inChain ? lighten(color, 0.35) : color;
+      let fillColor = color;
+      if (inChain) fillColor = lighten(color, 0.35);
+      else if (hasActiveChain && !isValidNext) fillColor = darken(color, 0.5);
+      ctx.fillStyle = fillColor;
       roundRect(ctx, x, y, TILE, TILE, RADIUS);
       ctx.fill();
 
-      // Chain highlight border
+      // Chain highlight border; green pulse on valid-next tiles
       if (inChain) {
         ctx.strokeStyle = isLast ? '#ffffff' : 'rgba(255,255,255,0.6)';
         ctx.lineWidth = isLast ? 3 : 2;
+        roundRect(ctx, x + 1, y + 1, TILE - 2, TILE - 2, RADIUS - 1);
+        ctx.stroke();
+      } else if (isValidNext) {
+        ctx.strokeStyle = 'rgba(120,255,120,0.8)';
+        ctx.lineWidth = 2;
         roundRect(ctx, x + 1, y + 1, TILE - 2, TILE - 2, RADIUS - 1);
         ctx.stroke();
       }
@@ -177,6 +189,14 @@ export function renderBoard(ctx: CanvasRenderingContext2D, s: RenderState): void
     }
     ctx.stroke();
   }
+}
+
+function darken(hex: string, amount: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const clamp = (v: number) => Math.max(0, Math.round(v * (1 - amount)));
+  return `rgb(${clamp(r)},${clamp(g)},${clamp(b)})`;
 }
 
 // Simple brightness boost without external deps

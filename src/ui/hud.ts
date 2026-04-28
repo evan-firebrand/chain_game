@@ -1,4 +1,4 @@
-import type { GameState } from '../game-kernel/index.js';
+import type { GameState } from '../game-session/index.js';
 
 export interface HudElements {
   turn: HTMLElement;

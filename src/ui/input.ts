@@ -1,10 +1,16 @@
-import type { Cell } from '../game-kernel/index.js';
+import type { Cell } from '../game-session/index.js';
 import { pixelToCell } from './board.js';
 
 export interface InputCallbacks {
   onChainUpdate: (chain: ReadonlyArray<Cell>) => void;
   onChainCommit: (chain: ReadonlyArray<Cell>) => void;
   onChainCancel: () => void;
+}
+
+function isAdjacent(a: Cell, b: Cell): boolean {
+  return Math.abs(a.row - b.row) <= 1 &&
+    Math.abs(a.col - b.col) <= 1 &&
+    (a.row !== b.row || a.col !== b.col);
 }
 
 export function attachInput(
@@ -43,20 +49,19 @@ export function attachInput(
     const cell = getCell(e);
     if (cell === null) return;
 
-    // Don't add if it's the same as last cell
     const last = chain[chain.length - 1];
     if (last !== undefined && last.row === cell.row && last.col === cell.col) return;
 
-    // Check if already in chain — allow backtrack (remove from end)
+    // Backtrack: if cell is already in chain, slice back to it (any depth)
     const existingIdx = chain.findIndex(c => c.row === cell.row && c.col === cell.col);
     if (existingIdx !== -1) {
-      // Can only backtrack to the immediately preceding cell
-      if (existingIdx === chain.length - 2) {
-        chain = chain.slice(0, chain.length - 1);
-        callbacks.onChainUpdate(chain);
-      }
+      chain = chain.slice(0, existingIdx + 1);
+      callbacks.onChainUpdate(chain);
       return;
     }
+
+    // Only extend if new cell is adjacent to the chain end
+    if (last !== undefined && !isAdjacent(last, cell)) return;
 
     chain = [...chain, cell];
     callbacks.onChainUpdate(chain);

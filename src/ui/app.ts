@@ -1,6 +1,12 @@
-import { DEFAULT_CONFIG, validateChain, computeChainResult } from '../game-kernel/index.js';
-import type { Cell, TileValue } from '../game-kernel/index.js';
-import { GameSession } from '../game-session/session.js';
+import {
+  DEFAULT_CONFIG,
+  validateChain,
+  computeChainResult,
+  getAdjacentCells,
+  validateChainExtension,
+  GameSession,
+} from '../game-session/index.js';
+import type { Cell, TileValue } from '../game-session/index.js';
 import {
   boardPixelWidth,
   boardPixelHeight,
@@ -110,9 +116,10 @@ function mount(): void {
   canvas.width = W;
   canvas.height = H;
 
-  // Scale canvas for display while keeping logical size
-  canvas.style.width = `${W}px`;
-  canvas.style.height = `${H}px`;
+  // Responsive: scale down on narrow viewports, never scale up
+  canvas.style.width = `min(100%, ${W}px)`;
+  canvas.style.aspectRatio = `${W} / ${H}`;
+  canvas.style.height = 'auto';
 
   const ctxOrNull = canvas.getContext('2d');
   if (ctxOrNull === null) return;
@@ -123,6 +130,36 @@ function mount(): void {
 
   let currentChain: ReadonlyArray<Cell> = [];
   let previewValue: TileValue | null = null;
+  let validExtensions: ReadonlySet<string> = new Set();
+
+  function computeValidExtensions(chain: ReadonlyArray<Cell>): ReadonlySet<string> {
+    if (chain.length === 0) return new Set();
+    const state = session.getState();
+    const last = chain[chain.length - 1];
+    if (last === undefined) return new Set();
+    const lastTile = state.board[last.row]?.[last.col];
+    if (lastTile === undefined || lastTile.value === 0) return new Set();
+    const chainKeys = new Set(chain.map(c => `${c.row},${c.col}`));
+    const adj = getAdjacentCells(last, config.gridRows, config.gridCols);
+    const result = new Set<string>();
+    for (const neighbor of adj) {
+      const key = `${neighbor.row},${neighbor.col}`;
+      if (chainKeys.has(key)) continue;
+      const neighborTile = state.board[neighbor.row]?.[neighbor.col];
+      if (neighborTile === undefined || neighborTile.value === 0) continue;
+      // First extension: must be same-value as chain[0]
+      if (chain.length === 1) {
+        const firstTile = state.board[chain[0]!.row]?.[chain[0]!.col];
+        if (firstTile !== undefined && neighborTile.value === firstTile.value) {
+          result.add(key);
+        }
+      } else {
+        const { valid } = validateChainExtension(lastTile, neighborTile);
+        if (valid) result.add(key);
+      }
+    }
+    return result;
+  }
 
   function render(): void {
     const state = session.getState();
@@ -130,107 +167,60 @@ function mount(): void {
       board: state.board,
       chain: currentChain,
       previewValue,
+      validExtensions,
       rows: config.gridRows,
       cols: config.gridCols,
     });
     updateHud(hud, state);
   }
 
-  session.on(() => render());
-
-  const detachInput = attachInput(canvas, config.gridRows, config.gridCols, {
-    onChainUpdate(chain) {
-      currentChain = chain;
-      previewValue = null;
-
-      const state = session.getState();
-      if (chain.length >= 2) {
-        const validation = validateChain(state.board, chain);
-        if (validation.valid) {
-          try {
-            previewValue = computeChainResult(state.board, chain, config);
-          } catch {
-            previewValue = null;
-          }
+  function makeInputCallbacks() {
+    return {
+      onChainUpdate(chain: ReadonlyArray<Cell>) {
+        currentChain = chain;
+        previewValue = null;
+        validExtensions = computeValidExtensions(chain);
+        const state = session.getState();
+        if (chain.length >= 2 && validateChain(state.board, chain).valid) {
+          try { previewValue = computeChainResult(state.board, chain, config); }
+          catch { previewValue = null; }
         }
-      }
-      updateChainPreview(hud, previewValue);
-      render();
-    },
-
-    onChainCommit(chain) {
-      const state = session.getState();
-      if (state.phase === 'game-over') {
-        currentChain = [];
-        previewValue = null;
+        updateChainPreview(hud, previewValue);
         render();
-        return;
-      }
-
-      const validation = validateChain(state.board, chain);
-      if (validation.valid) {
+      },
+      onChainCommit(chain: ReadonlyArray<Cell>) {
+        const state = session.getState();
         currentChain = [];
         previewValue = null;
-        session.dispatch({ kind: 'commit-chain', chain });
-      } else {
+        validExtensions = new Set();
+        if (state.phase !== 'game-over' && validateChain(state.board, chain).valid) {
+          session.dispatch({ kind: 'commit-chain', chain });
+        } else {
+          updateChainPreview(hud, null);
+          render();
+        }
+      },
+      onChainCancel() {
         currentChain = [];
         previewValue = null;
+        validExtensions = new Set();
         updateChainPreview(hud, null);
         render();
-      }
-    },
+      },
+    };
+  }
 
-    onChainCancel() {
-      currentChain = [];
-      previewValue = null;
-      updateChainPreview(hud, null);
-      render();
-    },
-  });
+  session.on(() => render());
+  let detach = attachInput(canvas, config.gridRows, config.gridCols, makeInputCallbacks());
 
-  // Restart button
   const restartBtn = document.getElementById('game-over-restart');
   if (restartBtn !== null) {
     restartBtn.addEventListener('click', () => {
       hud.gameOver.classList.add('hidden');
-      detachInput();
+      detach();
       session = new GameSession(config);
       session.on(() => render());
-      attachInput(canvas, config.gridRows, config.gridCols, {
-        onChainUpdate(chain) {
-          currentChain = chain;
-          previewValue = null;
-          const st = session.getState();
-          if (chain.length >= 2) {
-            const v = validateChain(st.board, chain);
-            if (v.valid) {
-              try { previewValue = computeChainResult(st.board, chain, config); }
-              catch { previewValue = null; }
-            }
-          }
-          updateChainPreview(hud, previewValue);
-          render();
-        },
-        onChainCommit(chain) {
-          const st = session.getState();
-          if (st.phase !== 'game-over' && validateChain(st.board, chain).valid) {
-            currentChain = [];
-            previewValue = null;
-            session.dispatch({ kind: 'commit-chain', chain });
-          } else {
-            currentChain = [];
-            previewValue = null;
-            updateChainPreview(hud, null);
-            render();
-          }
-        },
-        onChainCancel() {
-          currentChain = [];
-          previewValue = null;
-          updateChainPreview(hud, null);
-          render();
-        },
-      });
+      detach = attachInput(canvas, config.gridRows, config.gridCols, makeInputCallbacks());
       render();
     });
   }
