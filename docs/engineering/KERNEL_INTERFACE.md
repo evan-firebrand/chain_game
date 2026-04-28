@@ -268,17 +268,21 @@ These are from `docs/Merge_Game_Design_Journal.md`. All must pass before Phase 1
 | T4 | [2, 2, 4, 8] | 16 | 2 doubling-ext, 0 same-ext |
 | T5 | [2, 2, 4, 4, 8] | 16 | 2 doubling-ext, 1 same-ext, ⌊1/2⌋=0 |
 | T6 | [2, 2, 2, 2, 4, 4, 8] | 32 | 2 doubling-ext, 3 same-ext, ⌊3/2⌋=1 |
-| T7 | [4, 4, 8] | 16 | last=8, s=0, 1 doubling-ext → 8×2×1=16 |
+| T7 | [4, 4, 8] | 16 | last=8, s=0 → 8×2×1=16 |
 | T8a | [2, 2, 2, 2, 2, 2] | 16 | last=2, s=4, ⌊4/2⌋=2 → 2×2×4=16 |
-| T8b | [2, 2, 4, 4, 4, 4, 8] | 64 | last=8, s=4, ⌊4/2⌋=2 → 8×2×4=64 |
+| T8b | [2, 2, 4, 4, 4, 4, 8] | 32 | last=8, s=3, ⌊3/2⌋=1 → 8×2×2=32 |
 
-**Formula checks:**
-- T6: last=8, s=3, k=2 → 8 × 2 × 2^⌊3/2⌋ = 8 × 2 × 2 = 32 ✓
-- T7: last=8, s=0, 1 doubling → 8 × 2 × 2^0 = 16 ✓
+**Formula checks (all verified):**
+- T6: last=8, s=3 → 8 × 2 × 2^1 = 32 ✓
+- T7: last=8, s=0 (the 8 is a doubling ext, not same-value) → 8 × 2 × 1 = 16 ✓
 - T8a: last=2, s=4 → 2 × 2 × 2^2 = 16 ✓
-- T8b: last=8, s=4 → 8 × 2 × 2^2 = 64 ✓ (not 32 — corrected from earlier draft)
+- T8b: last=8, s=3 (first 4 is a doubling ext from 2; next three 4s are same-value; 8 is doubling) → 8 × 2 × 2^1 = 32 ✓
 
-**⚠️ Note:** T7 and T8b values were wrong in the session brief for the Test Agent. The correct values per the formula are T7=16 and T8b=64. Verify against the Design Journal's exact chain examples before writing the test vectors.
+**Path rules (confirmed by Evan, 2026-04-28):**
+- Minimum chain length: 2 tiles
+- No tile reuse within a chain (same cell cannot appear twice)
+- Any row or column may be revisited — only the specific cell is locked once used
+- Extension rule applies from tile 2 onward: each added tile must be same-value as OR double the current chain end
 
 ---
 

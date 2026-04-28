@@ -48,11 +48,11 @@ Source: `docs/Merge_Game_Design_Journal.md`
 | T4 | [2, 2, 4, 8] | 16 | last=8, s=0, 2 doublings → 8×2×1=16 |
 | T5 | [2, 2, 4, 4, 8] | 16 | last=8, s=1, ⌊1/2⌋=0 → 8×2×1=16 |
 | T6 | [2, 2, 2, 2, 4, 4, 8] | 32 | last=8, s=3, ⌊3/2⌋=1 → 8×2×2=32 |
-| T7 | [4, 4, 8] | 32 | last=8, s=0 → 8×2×1=16... wait: T7 should be [4,4,8] → last=8, s=0 → 16 or 32? |
+| T7 | [4, 4, 8] | 16 | last=8, s=0 (8 is doubling ext from 4, not same-value) → 8×2×1=16 |
 | T8a | [2, 2, 2, 2, 2, 2] | 16 | last=2, s=4, ⌊4/2⌋=2 → 2×2×4=16 |
-| T8b | [2, 2, 4, 4, 4, 4, 8] | 32 | last=8, s=4, ⌊4/2⌋=2 → 8×2×4=32... check: 8×2=16, ×4=64? No: 8 × 2 × 2^2 = 8×2×4=64? |
+| T8b | [2, 2, 4, 4, 4, 4, 8] | 32 | last=8, s=3 (first 4 doubles the 2; next three 4s are same-value; 8 doubles the 4) → 8×2×2^1=32 |
 
-**NOTE:** T7 and T8b values need confirmation from Evan via a design-question issue before you write those test cases. File the issue immediately. For T7: the Design Journal's exact value may differ — cite the Journal, don't compute from first principles. For T8b: the formula gives 8×2×2^2=64 not 32, which differs from the plan's stated value. Flag this.
+All values confirmed. No open questions on these vectors.
 
 ---
 
