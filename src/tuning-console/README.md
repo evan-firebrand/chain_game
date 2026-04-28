@@ -1,24 +1,51 @@
 # tuning-console
 
 **Owner:** UI Agent
-**Phase:** 3
+**Phase:** 3 (shipped)
 
-Live parameter adjustment panel. Attaches to an active game session. Evan changes spawn weights, k, and grid dimensions without restarting.
+Live parameter adjustment panel. Attaches to an active game session.
+Evan changes Rule D `k` and spawn weights without restarting; grid
+dimensions and prngSeed via `[New Game with these settings]`.
 
 **Imports from:** `game-session` only.
 
 ## Files
 
-| File | Purpose | Phase |
+| File | Purpose | Coverage |
 |---|---|---|
-| `console.ts` | Panel component; show/hide without affecting game state | 3 |
-| `controls.ts` | Individual control widgets (sliders, dropdowns, number inputs) | 3 |
-| `config-export.ts` | JSON export/import of current parameter config | 3 |
+| `console.ts` | Side panel: mount/destroy, sliders, advanced toggle, JSON section, session listener, rebindSession | UAT (DOM, no jsdom) |
+| `controls.ts` | DOM widget factories: `makeSlider`, `makeNumberInput`, `makeButton` | UAT (DOM, no jsdom) |
+| `config-export.ts` | `exportConfig` / `importConfig` with field-by-field validation | unit tests, ≥80% |
 
 ## Parameter tiers
 
-See `docs/engineering/PARAMETER_TIERS.md` (created in Phase 3) for the full tier assignment list.
+See `docs/engineering/PARAMETER_TIERS.md` for the authoritative list.
 
-- **Tier 1** (live sliders): `k`, spawn weights per tier — take effect on next chain
-- **Tier 2** (config fields): `gridWidth`, `gridHeight` — require new game
-- **Tier 3** (code only): adjacency model, chain start rule — settled design, not exposed
+- **Tier 1** (live sliders): `ruleK`, spawn weights for 2/4/8/16/32/64/128/256
+- **Tier 2** (advanced + new-game): `gridRows`, `gridCols`, `prngSeed`
+- **Tier 3** (code only): adjacency, chain-start rule, extension rule, formula shape, PRNG algo
+
+## Public entry
+
+```ts
+import { mountTuningConsole } from './console.js';
+
+const handle = mountTuningConsole({
+  mountTarget: document.body,
+  session,
+  onRequestNewGame: (cfg) => {
+    // UI re-creates GameSession + canvas + input here
+    // and calls handle.rebindSession(newSession)
+  },
+});
+```
+
+## JSON export schema
+
+Mirrors `GameConfig`. Round-trippable via `importConfig(exportConfig(config))`.
+See `docs/engineering/PARAMETER_TIERS.md` §"JSON export schema".
+
+## Toggle
+
+`[⚙]` button in HUD top bar toggles `body[data-console-open]`. Panel is
+position:fixed so toggling does not re-flow the canvas.
