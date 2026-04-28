@@ -1,8 +1,8 @@
 # Kernel Interface Specification
 
-**Status:** Proposed — awaiting Evan approval before Phase 1 implementation begins.
+**Status:** Accepted — approved by Evan 2026-04-28. Phase 1 implementation may begin.
 
-This document defines the TypeScript interface contracts for `src/game-kernel/`. It is the load-bearing contract that every downstream module depends on. No implementation starts until Evan approves this document.
+This document defines the TypeScript interface contracts for `src/game-kernel/`. It is the load-bearing contract that every downstream module depends on.
 
 ---
 
@@ -268,22 +268,36 @@ These are from `docs/Merge_Game_Design_Journal.md`. All must pass before Phase 1
 | T4 | [2, 2, 4, 8] | 16 | 2 doubling-ext, 0 same-ext |
 | T5 | [2, 2, 4, 4, 8] | 16 | 2 doubling-ext, 1 same-ext, ⌊1/2⌋=0 |
 | T6 | [2, 2, 2, 2, 4, 4, 8] | 32 | 2 doubling-ext, 3 same-ext, ⌊3/2⌋=1 |
-| T7 | [4, 4, 8] | 32 | Different starting value |
-| T8a | [2, 2, 2, 2, 2, 2] | 16 | 4 same-ext, ⌊4/2⌋=2, two bonus doublings |
-| T8b | [2, 2, 4, 4, 4, 4, 8] | 32 | 2 doubling-ext, 4 same-ext, ⌊4/2⌋=2 |
+| T7 | [4, 4, 8] | 16 | last=8, s=0, 1 doubling-ext → 8×2×1=16 |
+| T8a | [2, 2, 2, 2, 2, 2] | 16 | last=2, s=4, ⌊4/2⌋=2 → 2×2×4=16 |
+| T8b | [2, 2, 4, 4, 4, 4, 8] | 64 | last=8, s=4, ⌊4/2⌋=2 → 8×2×4=64 |
 
-**Formula check for T6:** last=8, s=3, k=2 → 8 × 2 × 2^⌊3/2⌋ = 8 × 2 × 2^1 = 32 ✓
+**Formula checks:**
+- T6: last=8, s=3, k=2 → 8 × 2 × 2^⌊3/2⌋ = 8 × 2 × 2 = 32 ✓
+- T7: last=8, s=0, 1 doubling → 8 × 2 × 2^0 = 16 ✓
+- T8a: last=2, s=4 → 2 × 2 × 2^2 = 16 ✓
+- T8b: last=8, s=4 → 8 × 2 × 2^2 = 64 ✓ (not 32 — corrected from earlier draft)
+
+**⚠️ Note:** T7 and T8b values were wrong in the session brief for the Test Agent. The correct values per the formula are T7=16 and T8b=64. Verify against the Design Journal's exact chain examples before writing the test vectors.
 
 ---
 
-## Design Gaps That May Require Clarification
+## Confirmed Mechanics (Evan, 2026-04-28)
 
-Before Phase 1 starts, Evan should resolve these (or accept the conservative default):
+These were open design gaps, now resolved:
 
-| Gap | Conservative default | Issue to file |
-|---|---|---|
-| L=1 chain: how many tiles spawn? | 0 (L-1=0) | `design-question` |
-| "Last position" when path revisits a column | Last cell the player tapped/dragged to | `design-question` |
-| Gravity: simultaneous column drops — defined order? | Left-to-right | `design-question` |
-| Board fill on new game: full 42 cells, or partial? | Full grid | `design-question` |
-| Initial board seeding: guarantee at least one legal chain start? | Yes, retry until valid | `design-question` |
+| Question | Answer |
+|---|---|
+| Minimum chain length | **2 tiles** (two adjacent same-value tiles is a complete valid move) |
+| Result tile placement | **The last tile the player ends the chain on** gets the new value; all other chain tiles vanish |
+| Board fill on new game | **Completely full board** (all 42 cells filled at game start) |
+| Initial board guarantee | **Yes** — board must have at least 1 valid move (≥1 adjacent same-value pair) at start |
+| Post-chain spawn count | **L−1 new tiles** spawn from the top (chain removes L tiles, 1 result placed back → L−1 needed to refill completely) |
+| L=1 chain spawn count | **Moot** — minimum chain is 2, so L≥2 always; minimum spawn = 1 |
+
+## Remaining Open Questions (file as design-question issues before Phase 1 gate)
+
+| Question | Conservative default to use if blocked |
+|---|---|
+| Gravity: when multiple columns drop simultaneously, is order defined? | Left-to-right (cosmetic only; game correctness unaffected) |
+| Can the player's traced path revisit the same column (but not the same cell)? | Yes — only cell reuse is forbidden, not column reuse |
