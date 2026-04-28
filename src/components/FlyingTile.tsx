@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useId, useMemo } from "react";
 import type { Coord } from "../game/types";
 import { CELL_SIZE, cellOrigin } from "./boardLayout";
 import { ANIM } from "./animationTiming";
@@ -15,8 +15,7 @@ type Props = {
 export function FlyingTile({ value, waypoints, delay, onArrive }: Props) {
   const { bg, fg } = tileColors(value);
   const label = value >= 1024 ? formatCompact(value) : String(value);
-  const animNameRef = useRef(`fly-${Math.random().toString(36).slice(2, 9)}`);
-  const styleRef = useRef<HTMLStyleElement | null>(null);
+  const animName = `fly-${useId().replace(/:/g, "-")}`;
 
   const keyframesCss = useMemo(() => {
     if (waypoints.length === 0) return "";
@@ -49,14 +48,13 @@ export function FlyingTile({ value, waypoints, delay, onArrive }: Props) {
         `${pct.toFixed(2)}% { transform: translate(${x}px, ${y}px) scaleX(${scaleX.toFixed(3)}) scaleY(${scaleY.toFixed(3)}); opacity: ${isLast ? 0 : 1}; }`
       );
     }
-    return `@keyframes ${animNameRef.current} { ${frames.join(" ")} }`;
-  }, [waypoints]);
+    return `@keyframes ${animName} { ${frames.join(" ")} }`;
+  }, [waypoints, animName]);
 
   useEffect(() => {
     const style = document.createElement("style");
     style.textContent = keyframesCss;
     document.head.appendChild(style);
-    styleRef.current = style;
     return () => {
       style.remove();
     };
@@ -71,7 +69,7 @@ export function FlyingTile({ value, waypoints, delay, onArrive }: Props) {
 
   const start = waypoints[0];
   const startOrigin = cellOrigin(start.r, start.c);
-  const animStyle = `${animNameRef.current} ${ANIM.flyPerTile}ms cubic-bezier(.5,.1,.4,1) ${delay}ms forwards`;
+  const animStyle = `${animName} ${ANIM.flyPerTile}ms cubic-bezier(.5,.1,.4,1) ${delay}ms forwards`;
 
   return (
     <>

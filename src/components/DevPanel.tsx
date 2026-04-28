@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import type { GameMode, GameState, SpawnAlgo, Telemetry } from "../game/types";
 import { ALL_ALGOS, ALL_MODES, MODE_LABELS, algoUsesSoftness, algoUsesStrength } from "../game/types";
-import { appendRun, clearRuns, readRuns, summarize } from "../game/runLog";
+import { appendRun, clearRuns, summarize } from "../game/runLog";
 import type { RunEntry } from "../game/runLog";
 import { benchmark, sweep } from "../game/bot";
 import type { BenchmarkSummary, BotPolicy } from "../game/bot";
@@ -770,5 +770,3 @@ function Row({
     </div>
   );
 }
-
-export { readRuns };

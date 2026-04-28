@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useMemo } from "react";
 import { tileColors } from "./palette";
 
 type Props = {
@@ -13,14 +13,11 @@ type Particle = { dx: number; dy: number; size: number };
 
 export function MergeBurst({ cx, cy, value }: Props) {
   const { fg } = tileColors(value);
-  const instanceId = useRef(`burst-${Math.random().toString(36).slice(2, 9)}`);
+  const id = `burst-${useId().replace(/:/g, "-")}`;
 
-  // Deterministic particle layout, computed once
-  const particlesRef = useRef<Particle[] | null>(null);
-  if (!particlesRef.current) {
-    particlesRef.current = Array.from({ length: PARTICLE_COUNT }, (_, i) => {
+  const particles = useMemo<Particle[]>(() => {
+    return Array.from({ length: PARTICLE_COUNT }, (_, i) => {
       const angle = (i / PARTICLE_COUNT) * 2 * Math.PI;
-      // Varied distances without Math.random for determinism across renders
       const dist = 35 + (i * 3.7) % 35;
       return {
         dx: Math.cos(angle) * dist,
@@ -28,10 +25,7 @@ export function MergeBurst({ cx, cy, value }: Props) {
         size: 4 + (i % 5),
       };
     });
-  }
-
-  const particles = particlesRef.current;
-  const id = instanceId.current;
+  }, []);
 
   useEffect(() => {
     const rules = particles.map((p, i) => `
@@ -44,7 +38,7 @@ export function MergeBurst({ cx, cy, value }: Props) {
     style.textContent = rules.join("\n");
     document.head.appendChild(style);
     return () => { style.remove(); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [id, particles]);
 
   return (
     <>

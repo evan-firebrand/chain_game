@@ -12,7 +12,7 @@ export default function App() {
   const [settings, setSettings] = useSettingsPersistence();
   const ctrl = useGameController(settings, setSettings);
   const [devOpen, setDevOpen] = useState(false);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 500);

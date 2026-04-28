@@ -5,21 +5,20 @@ type Props = {
 };
 
 export function TrophyFlash({ flash }: Props) {
-  const [visible, setVisible] = useState<{ value: number; movesAt: number } | null>(null);
+  const [hideAtMoves, setHideAtMoves] = useState<number | null>(null);
 
   useEffect(() => {
     if (!flash) return;
-    setVisible(flash);
-    const t = setTimeout(() => setVisible(null), 1500);
+    const t = setTimeout(() => setHideAtMoves(flash.movesAt), 1500);
     return () => clearTimeout(t);
-  }, [flash?.value, flash?.movesAt]);
+  }, [flash]);
 
-  if (!visible) return null;
+  if (!flash || flash.movesAt === hideAtMoves) return null;
   return (
-    <div className="trophy-flash" key={`${visible.value}-${visible.movesAt}`}>
+    <div className="trophy-flash" key={`${flash.value}-${flash.movesAt}`}>
       <div className="trophy-flash-card">
         <div className="trophy-flash-label">New Trophy</div>
-        <div className="trophy-flash-value">Beast {visible.value}</div>
+        <div className="trophy-flash-value">Beast {flash.value}</div>
         <div className="trophy-flash-sub">defeated</div>
       </div>
     </div>

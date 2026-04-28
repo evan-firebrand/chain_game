@@ -316,7 +316,6 @@ export function runBot(seed: number, algo: SpawnAlgo, opts: RunOpts = {}): BotRe
     let chainLenSum = 0;
     let peakByMove50 = 0;
     terminationReason = "gameOver"; // overwritten below if loop exits other ways
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       if (state.gameOver) { terminationReason = "gameOver"; break; }
       if (guard >= maxMoves) { terminationReason = "moveCapReached"; break; }
