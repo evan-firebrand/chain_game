@@ -1206,6 +1206,13 @@
   font-family: ui-monospace, Menlo, monospace;
 }
 
+.mode-status-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+
 .mode-status {
   font-family: ui-monospace, Menlo, monospace;
   font-size: 12px;

@@ -249,7 +249,7 @@ function buildFinalState(state: GameState, ctx: BuildFinalStateCtx): GameState {
   );
 
   const nextGoal: LevelGoal | null = leveledUp
-    ? generateGoalForLevel(ctx.targets.nextLevels)
+    ? generateGoalForLevel(ctx.targets.nextLevels + 1)
     : updatedGoal;
   const nextGoalMet = leveledUp ? false : updatedGoalMet;
 
@@ -374,7 +374,7 @@ export function newGame(
     ratchetInterval: Math.max(1, ratchetInterval),
     undoStack: [],
     undoCharges: UNDO_INITIAL_CHARGES,
-    levelGoal: null,
+    levelGoal: generateGoalForLevel(1),
     levelGoalMet: false,
   };
 }
