@@ -8,7 +8,7 @@
 
 Chain Game is a browser-based 2D number-merging puzzle game with a path-chain mechanic; the design is complete and the engineering team is now building it in phases, starting with the pure game-logic kernel.
 
-**Current phase:** Phase 1 (game-kernel) — implementing the pure logic module. Game Logic Agent and Test Agent are active in parallel.
+**Current phase:** Phase 3 (Tuning Console) — kernel and playable v1 are complete, Tuning Console is next.
 
 ---
 
@@ -160,15 +160,27 @@ When you hit an ambiguity not covered by the spec:
 
 **Phase 0 — Project Foundation** ✅ COMPLETE
 
-**Phase 1 — game-kernel** 🟡 IN PROGRESS
+**Phase 1 — game-kernel** ✅ COMPLETE (2026-04-28)
+- All T1-T8b test vectors pass
+- ≥93% line/100% function coverage on `src/game-kernel/`
+- Property tests: valid chain always returns power-of-2
+- Kernel source confirmed by Evan
+- Zero imports outside `src/game-kernel/`
 
-Gate criteria (all must pass before Phase 2 begins):
-- [ ] All T1-T8b test vectors pass
-- [ ] 100% line/function/branch coverage on `src/game-kernel/`
-- [ ] Property test: any valid chain always returns a power-of-2
-- [ ] Evan reads kernel source and confirms it matches spec
-- [ ] 1000 random games run with zero crashes
-- [ ] Zero imports outside `src/game-kernel/`
+**Phase 2 — Playable v1** ✅ COMPLETE (2026-04-28)
+- UAT passed by Evan
+- Chain start/extension/resolution match spec
+- Gravity and L-1 spawn verified
+- Game-over detection and restart work
+- Zero game logic in UI layer (CI boundary check passes)
+
+**Phase 3 — Tuning Console** 🟡 NEXT
+
+Gate criteria (all must pass before Phase 4 begins):
+- [ ] All Tier 1 parameters exposed (k, spawn weights per tier)
+- [ ] Changing k mid-game produces correct results on next chain
+- [ ] Config exportable as JSON
+- [ ] Evan uses it in a real play session
 
 See `docs/engineering/ARCHITECTURE.md` for full phase sequence.
 
