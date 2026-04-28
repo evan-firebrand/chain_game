@@ -22,8 +22,8 @@ export function main(argv: string[]): void {
   const mdePct = f.num("--mde", 5, { min: 0.01 });
   const oneSample = f.has("--one-sample");
 
-  let manualMean = f.get("--mean") !== undefined ? f.num("--mean", 0) : NaN;
-  let manualStd = f.get("--stddev") !== undefined ? f.num("--stddev", 0, { min: 0 }) : NaN;
+  const manualMean = f.get("--mean") !== undefined ? f.num("--mean", 0) : NaN;
+  const manualStd = f.get("--stddev") !== undefined ? f.num("--stddev", 0, { min: 0 }) : NaN;
 
   if (manifestPath) {
     const raw = JSON.parse(readFileSync(manifestPath, "utf8"));
@@ -32,8 +32,8 @@ export function main(argv: string[]): void {
     console.log(`\n  Power analysis — metric=${metric}, MDE=${mdePct}%, ${oneSample ? "one" : "two"}-sample\n`);
     console.log(`    cell                                  mean       stddev    needed N`);
     console.log(`    ------------------------------------  ---------  --------  --------`);
-    for (const s of summaries) {
-      const xs = (s.runs as any[]).map((r) => r[metric] as number);
+    for (const s of summaries as Array<{ mode: string; algo: string; policy: string; runs: Array<Record<string, number>> }>) {
+      const xs = s.runs.map((r) => r[metric]);
       const m = meanOf(xs);
       const sd = stddevOf(xs);
       const mde = Math.abs(m) * (mdePct / 100);

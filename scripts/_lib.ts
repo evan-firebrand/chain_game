@@ -6,7 +6,7 @@
 
 import { execSync } from "node:child_process";
 import os from "node:os";
-import { mkdirSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname } from "node:path";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -454,11 +454,10 @@ export function loadBaselineGamesPerSec(): number | null {
   try {
     const dir = "baselines";
     if (!existsSync(dir)) return null;
-    const fs = require("node:fs");
-    const files = fs.readdirSync(dir).filter((f: string) => f.endsWith(".json")).sort();
+    const files = readdirSync(dir).filter((f) => f.endsWith(".json")).sort();
     if (files.length === 0) return null;
     const latest = files[files.length - 1];
-    const data = JSON.parse(fs.readFileSync(`${dir}/${latest}`, "utf8"));
+    const data = JSON.parse(readFileSync(`${dir}/${latest}`, "utf8"));
     if (data.schema !== "harness-perf-baseline") return null;
     return typeof data.overallGamesPerSec === "number" ? data.overallGamesPerSec : null;
   } catch {

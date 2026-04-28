@@ -16,9 +16,17 @@ import {
   seedsMatch, pairedDeltaCI, independentDeltaCI, mean as meanOf, printTable,
 } from "./_lib";
 
+type RunShape = { seed: number; [metric: string]: number };
+type SummaryShape = {
+  mode: string;
+  algo: string;
+  policy: string;
+  runs: RunShape[];
+  seedList?: number[];
+};
 type Manifest = {
   manifest?: { schema?: string };
-  summaries?: any[];
+  summaries?: SummaryShape[];
   // Studies wrap differently; we'll just look for `summaries` for now.
 };
 
@@ -26,17 +34,17 @@ type Cell = {
   mode: string;
   algo: string;
   policy: string;
-  runs: Array<{ seed: number; moves: number; peak: number; score: number; levelsCleared: number; modeMetric: number; chainLenSum: number }>;
+  runs: RunShape[];
   seedList?: number[];
 };
 
 function loadCells(path: string): Cell[] {
   const raw = JSON.parse(readFileSync(path, "utf8")) as Manifest;
   if (!raw.summaries) throw new Error(`${path}: no .summaries (only benchmark manifests are supported by compare for now).`);
-  return raw.summaries.map((s: any) => ({
+  return raw.summaries.map((s) => ({
     mode: s.mode, algo: s.algo, policy: s.policy,
     runs: s.runs,
-    seedList: s.seedList ?? s.runs?.map((r: any) => r.seed),
+    seedList: s.seedList ?? s.runs?.map((r) => r.seed),
   }));
 }
 
@@ -111,8 +119,8 @@ export function main(argv: string[]): void {
     const paired = seedsMatch(aSeeds, bSeeds);
     if (!paired) unpairedCount++;
     for (const m of metrics) {
-      const aVals = a.runs.map((r) => (r as any)[m] as number);
-      const bVals = b.runs.map((r) => (r as any)[m] as number);
+      const aVals = a.runs.map((r) => r[m]);
+      const bVals = b.runs.map((r) => r[m]);
       let delta: number, halfWidth: number, low: number, high: number;
       if (paired) {
         const r = pairedDeltaCI(aVals, bVals);

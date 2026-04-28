@@ -25,8 +25,7 @@ import { main as baselineMain } from "./baseline";
 import { main as compareMain } from "./compare";
 import { main as powerMain } from "./power";
 
-const COMMANDS = ["bench", "sweep", "baseline", "study", "replay", "compare", "power", "describe", "help"] as const;
-type Command = (typeof COMMANDS)[number];
+type Command = "bench" | "sweep" | "baseline" | "study" | "replay" | "compare" | "power" | "describe" | "help";
 
 function help(): void {
   console.log(`

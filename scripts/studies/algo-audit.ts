@@ -15,7 +15,7 @@ import { sweep, deterministicSeeds } from "../../src/game/bot";
 import type { BenchmarkSummary } from "../../src/game/bot";
 import { randomSeed } from "../../src/game/rng";
 import {
-  parseFlags, fmtNum, fmtCI, fmtProportionCI,
+  parseFlags, fmtCI, fmtProportionCI,
   envelope, reconstructCommand, writeJSON, isMainModule,
   checkGuardrails, estimateRuntimeMs, DEFAULT_MAX_GAMES,
 } from "../_lib";
