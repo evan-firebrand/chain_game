@@ -5,7 +5,7 @@ const VALID_TIER_VALUES: readonly TileValue[] = [
 ];
 
 export class ConfigImportError extends Error {
-  readonly field?: string;
+  readonly field: string | undefined;
   constructor(message: string, field?: string) {
     super(message);
     this.name = 'ConfigImportError';
