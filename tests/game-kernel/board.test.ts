@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { createGame } from '../../src/game-kernel/index.js';
-import type { Board, GameConfig, GameState, Tile, TileValue } from '../../src/game-kernel/types.js';
+import { createGame, applyAction, validateChain } from '../../src/game-kernel/index.js';
+import type { Board, GameConfig, GameState, Tile, TileValue, Cell, CommitChainAction } from '../../src/game-kernel/types.js';
 
 // applyGravity is an internal module — tested indirectly through createGame
 // and through the exported applyAction path. The spec only exports public API
@@ -242,5 +242,106 @@ describe('createGame — initial board', () => {
   it('turn is 0 at game start', () => {
     const state: GameState = createGame(DEFAULT_CONFIG);
     expect(state.turn).toBe(0);
+  });
+});
+
+// ── spawnTiles (via applyAction commit-chain) ─────────────────────────────
+
+function cellOf(row: number, col: number): Cell {
+  return { row: row as Cell['row'], col: col as Cell['col'] };
+}
+
+/** Find the first valid N-cell chain on the given board. */
+function findValidChain(board: Board, length: 2 | 3, config: GameConfig): Cell[] | null {
+  const rows = config.gridRows;
+  const cols = config.gridCols;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const v = (board[r] as Tile[])[c]!.value;
+      if (!v) continue;
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (!dr && !dc) continue;
+          const nr = r + dr, nc = c + dc;
+          if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
+          if ((board[nr] as Tile[])[nc]!.value !== v) continue;
+
+          if (length === 2) {
+            const ch = [cellOf(r, c), cellOf(nr, nc)];
+            if (validateChain(board, ch).valid) return ch;
+          } else {
+            // look for a 3rd cell
+            for (let dr2 = -1; dr2 <= 1; dr2++) {
+              for (let dc2 = -1; dc2 <= 1; dc2++) {
+                if (!dr2 && !dc2) continue;
+                const nr2 = nr + dr2, nc2 = nc + dc2;
+                if (nr2 < 0 || nr2 >= rows || nc2 < 0 || nc2 >= cols) continue;
+                if (nr2 === r && nc2 === c) continue; // no reuse
+                const v2 = (board[nr2] as Tile[])[nc2]!.value;
+                if (v2 === v || v2 === v * 2) {
+                  const ch = [cellOf(r, c), cellOf(nr, nc), cellOf(nr2, nc2)];
+                  if (validateChain(board, ch).valid) return ch;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
+describe('spawnTiles (via applyAction)', () => {
+  it('after a chain of length 2, exactly 1 new tile spawns', () => {
+    const state = createGame(makeConfig({ prngSeed: 42 }));
+    const chain = findValidChain(state.board, 2, DEFAULT_CONFIG);
+    expect(chain).not.toBeNull();
+    const action: CommitChainAction = { kind: 'commit-chain', chain: chain! };
+    const next = applyAction(state, action);
+    const spawnEv = next.events.find(e => e.kind === 'tiles-spawned') as
+      Extract<typeof next.events[0], { kind: 'tiles-spawned' }> | undefined;
+    expect(spawnEv).toBeDefined();
+    expect(spawnEv!.spawned).toHaveLength(1);
+  });
+
+  it('after a chain of length 3, exactly 2 new tiles spawn', () => {
+    const state = createGame(makeConfig({ prngSeed: 42 }));
+    const chain = findValidChain(state.board, 3, DEFAULT_CONFIG);
+    expect(chain).not.toBeNull();
+    const action: CommitChainAction = { kind: 'commit-chain', chain: chain! };
+    const next = applyAction(state, action);
+    const spawnEv = next.events.find(e => e.kind === 'tiles-spawned') as
+      Extract<typeof next.events[0], { kind: 'tiles-spawned' }> | undefined;
+    expect(spawnEv).toBeDefined();
+    expect(spawnEv!.spawned).toHaveLength(2);
+  });
+
+  it('spawned tile values are all valid powers of 2 in [2, 256]', () => {
+    const state = createGame(makeConfig({ prngSeed: 42 }));
+    const chain = findValidChain(state.board, 3, DEFAULT_CONFIG);
+    expect(chain).not.toBeNull();
+    const action: CommitChainAction = { kind: 'commit-chain', chain: chain! };
+    const next = applyAction(state, action);
+    const spawnEv = next.events.find(e => e.kind === 'tiles-spawned') as any;
+    const validPool = new Set([2, 4, 8, 16, 32, 64, 128, 256]);
+    for (const { value } of spawnEv!.spawned) {
+      expect(validPool.has(value)).toBe(true);
+    }
+  });
+
+  it('same prngState + same config produces same spawn sequence (determinism)', () => {
+    const stateA = createGame(makeConfig({ prngSeed: 42 }));
+    const stateB = createGame(makeConfig({ prngSeed: 42 }));
+    const chain = findValidChain(stateA.board, 2, DEFAULT_CONFIG);
+    expect(chain).not.toBeNull();
+    const action: CommitChainAction = { kind: 'commit-chain', chain: chain! };
+    const nextA = applyAction(stateA, action);
+    const nextB = applyAction(stateB, action);
+    const spawnA = nextA.events.find(e => e.kind === 'tiles-spawned') as any;
+    const spawnB = nextB.events.find(e => e.kind === 'tiles-spawned') as any;
+    expect(spawnA!.spawned).toEqual(spawnB!.spawned);
+    expect(nextA.prngState).toBe(nextB.prngState);
   });
 });

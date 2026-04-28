@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { validateChain, hasLegalChainStart } from '../../src/game-kernel/index.js';
-import type { Board, Cell, Tile, TileValue } from '../../src/game-kernel/types.js';
+import { validateChain, hasLegalChainStart, resolveChain, computeChainResult } from '../../src/game-kernel/index.js';
+import type { Board, Cell, Tile, TileValue, GameConfig } from '../../src/game-kernel/types.js';
 
 const ROWS = 7;
 const COLS = 6;
@@ -221,5 +221,78 @@ describe('hasLegalChainStart', () => {
       Array.from({ length: COLS }, () => emptyTile())
     );
     expect(hasLegalChainStart(grid as Board)).toBe(false);
+  });
+});
+
+// ── resolveChain — happy-path coverage of defensive guards ───────────────
+// Lines 80-86 in chain.ts are `if (lastCell === undefined)` and
+// `if (lastTile === undefined)`. These are unreachable with a valid chain but
+// the *check itself* (the truthy branch) executes on every call.
+// Calling resolveChain with valid inputs exercises those lines.
+
+const RESOLVE_CONFIG: Pick<GameConfig, 'ruleK'> = { ruleK: 2 };
+
+describe('resolveChain — happy-path (covers defensive guard lines)', () => {
+  it('2-cell same-value chain: sameExtensions=0, result=lastValue×2', () => {
+    const board = makeBoard([
+      { row: 0, col: 0, value: 4 },
+      { row: 0, col: 1, value: 4 },
+    ]);
+    const result = resolveChain(board, [cell(0, 0), cell(0, 1)], RESOLVE_CONFIG);
+    expect(result.sameExtensions).toBe(0);
+    expect(result.doublingExtensions).toBe(0);
+    expect(result.resultValue).toBe(8); // 4×2 = 8
+  });
+
+  it('3-cell same-value chain: sameExtensions=1', () => {
+    const board = makeBoard([
+      { row: 0, col: 0, value: 4 },
+      { row: 0, col: 1, value: 4 },
+      { row: 0, col: 2, value: 4 },
+    ]);
+    const result = resolveChain(board, [cell(0, 0), cell(0, 1), cell(0, 2)], RESOLVE_CONFIG);
+    expect(result.sameExtensions).toBe(1);
+    expect(result.doublingExtensions).toBe(0);
+  });
+
+  it('3-cell doubling chain: doublingExtensions=1, sameExtensions=0', () => {
+    const board = makeBoard([
+      { row: 0, col: 0, value: 4 },
+      { row: 0, col: 1, value: 4 },
+      { row: 0, col: 2, value: 8 }, // 8 = 4×2, doubling extension
+    ]);
+    const result = resolveChain(board, [cell(0, 0), cell(0, 1), cell(0, 2)], RESOLVE_CONFIG);
+    expect(result.sameExtensions).toBe(0);
+    expect(result.doublingExtensions).toBe(1);
+    expect(result.resultValue).toBe(16); // lastTile=8, sameExtensions=0 → 8×2=16
+  });
+
+  it('4-cell same-value chain: sameExtensions=2, triggers bonus (ruleK=2 → floor(2/2)=1 extra doubling)', () => {
+    const board = makeBoard([
+      { row: 0, col: 0, value: 2 },
+      { row: 0, col: 1, value: 2 },
+      { row: 1, col: 1, value: 2 },
+      { row: 1, col: 0, value: 2 },
+    ]);
+    const result = resolveChain(board, [cell(0, 0), cell(0, 1), cell(1, 1), cell(1, 0)], RESOLVE_CONFIG);
+    expect(result.sameExtensions).toBe(2);
+    // result = lastTile(2) × 2 × 2^floor(2/2) = 2×2×2 = 8
+    expect(result.resultValue).toBe(8);
+  });
+});
+
+describe('computeChainResult — covers resolveChain via public wrapper', () => {
+  it('2-cell chain with value 8: result = 16', () => {
+    const board = makeBoard([
+      { row: 3, col: 3, value: 8 },
+      { row: 3, col: 4, value: 8 },
+    ]);
+    const config: GameConfig = {
+      gridRows: ROWS, gridCols: COLS, ruleK: 2,
+      spawnPoolMin: 2, spawnPoolMax: 256,
+      spawnWeights: {},
+      prngSeed: 0,
+    };
+    expect(computeChainResult(board, [cell(3, 3), cell(3, 4)], config)).toBe(16);
   });
 });
