@@ -158,13 +158,56 @@ Plan target was **<2 s** for the sweep. Recorded 8.50 s — 4× above the target
 
 ---
 
+## Phase 3 baseline (sim-harness — Phase 5 gate measurement)
+
+Recorded **2026-04-29** on the reference machine, after commits 3.0-3.8.
+
+### Phase 5 gate (the actual contract)
+
+`docs/engineering/ARCHITECTURE.md` line 87: **"1000 games in <60s; deterministic; schema approved."**
+
+| Strategy | Mean | Per-game | RME | vs 60 s ceiling |
+|---|---|---|---|---|
+| `random`    | **5.69 s**  | 5.69 ms  | ±0.5% | **10.5× under** |
+| `greedy`    | **15.64 s** | 15.64 ms | ±3.0% | **3.83× under** |
+| `heuristic` | **18.29 s** | 18.29 ms | ±3.2% | **3.28× under** |
+
+**Gate met for every registered strategy.** Determinism is contract-tested: every (strategy, n, startStrategySeed) combination produces byte-identical output across runs (`tests/sim-harness/runner.test.ts`, `tests/sim-harness/analyzer.test.ts`).
+
+Greedy and heuristic are 2.7-3.2× slower than random because they enumerate 2- and 3-chains per turn AND produce longer games (chains compound, max tile rises, game runs longer). That's intentional — longer games are what the heuristic strategy is for. The headroom under the 60s ceiling absorbs the cost.
+
+### Cumulative speedup, Phase 0 → Phase 3
+
+| Bench | Phase 0 | Phase 1 | Phase 2 | Phase 3 (random) |
+|---|---|---|---|---|
+| 1000-game sweep | 47.7 s | 12.55 s | 8.50 s | **5.69 s** |
+| Speedup vs Phase 0 | 1× | 3.85× | 5.61× | **8.38×** |
+
+The full Phase 0 → Phase 3 sweep speedup is **8.38×** for the random strategy. The variance collapsed from ±42% (Phase 0) to ±0.5% (Phase 3) — the original ±42% was the actual blocker for getting reliable analysis data, and that's gone.
+
+### Phase 3 changes that contributed
+
+| # | Change | Notes |
+|---|---|---|
+| 3.0 | `SIM_HARNESS_SCHEMA.md` | Proposed; pending Evan approval to lift to Accepted |
+| 3.1 | Schema as TypeScript types | Mirrors 3.0; lockstep |
+| 3.2 | random strategy | Baseline 2-chain picker |
+| 3.3 | runner (`playOneGame`, `runGames`) | Forces `recordEvents:false`; histogram tracking |
+| 3.4 | analyzer | `GameResult[]` → `AggregateResult` |
+| 3.5 | sweep | One-axis config sweep |
+| 3.6 | greedy strategy | 2-3 chain length-bounded greedy |
+| 3.7 | heuristic strategy | Tier+length scoring; weights pending Evan sign-off |
+| 3.8 | Phase 5 gate bench | Source of truth |
+
+---
+
 ## Phase exit gates
 
 | Phase | Exit criterion | Outcome |
 |---|---|---|
-| Phase 1 (Tier 1 wins) | `applyAction` ≥3× faster, `sweep-1000` ≥5× faster | applyAction **2.88×**, sweep **3.85×** — just under both targets, but sweep is **4.78× under the Phase 5 60s ceiling**, which is the metric that actually gates downstream work. Greenlit. |
+| Phase 1 (Tier 1 wins) | `applyAction` ≥3× faster, `sweep-1000` ≥5× faster | applyAction **2.88×**, sweep **3.85×** — just under both raw-multiplier targets, but sweep is **4.78× under the Phase 5 60s ceiling**. Greenlit. |
 | Phase 2 (sim-fast surface) | `sweep-1000` < 2 s | sweep **8.50 s** — 4× above the stretch target, but **5.61× over Phase 0 baseline** and **7× under the Phase 5 ceiling**. Equivalence property test passed for 30 random games + 50 createGame seeds. Greenlit. |
-| Phase 3 (sim-harness) | Phase 5 gate hit; determinism green | _pending_ |
+| **Phase 3 (sim-harness)** | **Phase 5 gate hit; determinism green; schema approved** | **Random: 5.69 s, greedy: 15.64 s, heuristic: 18.29 s — gate hit for every strategy. Determinism property-tested. Schema proposed (Evan approval pending).** |
 
 ---
 
