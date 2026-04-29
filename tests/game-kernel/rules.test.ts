@@ -139,3 +139,46 @@ describe('computeChainResult — property tests', () => {
     }
   });
 });
+
+describe('computeChainResult — ruleK differentiation across k values', () => {
+  // Documents the finding from `studies/01-skill-depth-spread.md` §A.6:
+  // strategies in this codebase enumerate chains of length 2 or 3 only, which
+  // means s ≤ 1 same-extensions, so ⌊s/k⌋ = 0 for any k ≥ 2. The kernel rule
+  // differentiates k=2/3/4 only at s ≥ 2, i.e. chain length ≥ 4.
+
+  function withK(k: number): GameConfig {
+    return { ...DEFAULT_CONFIG, ruleK: k };
+  }
+
+  it('chain length 3 (s=1): k=2 and k=3 produce identical results', () => {
+    const { board, chain } = chainFromValues([2, 2, 2]);
+    const r2 = computeChainResult(board, chain, withK(2));
+    const r3 = computeChainResult(board, chain, withK(3));
+    const r4 = computeChainResult(board, chain, withK(4));
+    expect(r2).toBe(4);
+    expect(r3).toBe(4);
+    expect(r4).toBe(4);
+    expect(r2).toBe(r3);
+    expect(r3).toBe(r4);
+  });
+
+  it('chain length 3 (s=1): k=1 differs from k≥2', () => {
+    const { board, chain } = chainFromValues([2, 2, 2]);
+    expect(computeChainResult(board, chain, withK(1))).toBe(8);
+    expect(computeChainResult(board, chain, withK(2))).toBe(4);
+  });
+
+  it('chain length 4 (s=2): k=2 differs from k=3 (rule works as specified)', () => {
+    const { board, chain } = chainFromValues([2, 2, 2, 2]);
+    expect(computeChainResult(board, chain, withK(2))).toBe(8);
+    expect(computeChainResult(board, chain, withK(3))).toBe(4);
+    expect(computeChainResult(board, chain, withK(4))).toBe(4);
+  });
+
+  it('chain length 7 (s=5): k=2 differs from k=3, k=3 still equals k=4', () => {
+    const { board, chain } = chainFromValues([2, 2, 2, 2, 2, 2, 2]);
+    expect(computeChainResult(board, chain, withK(2))).toBe(16);
+    expect(computeChainResult(board, chain, withK(3))).toBe(8);
+    expect(computeChainResult(board, chain, withK(4))).toBe(8);
+  });
+});
