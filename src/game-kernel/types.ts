@@ -70,6 +70,14 @@ export interface GameState {
   readonly prngState: number;
   /** Accumulated event log for this game (used by sim harness). */
   readonly events: readonly GameEvent[];
+  /**
+   * Events produced by the *most recent* action only. Always populated;
+   * empty array on the result of `createGame`. Consumers that only need
+   * the per-turn delta (e.g. `game-session`) should read this rather
+   * than slicing `events` — that pattern forces `events` to remain
+   * cumulative and causes O(T²) growth in long games.
+   */
+  readonly lastEvents: readonly GameEvent[];
 }
 
 // ─── Actions ───────────────────────────────────────────────────────────────

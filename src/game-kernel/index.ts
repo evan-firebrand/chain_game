@@ -117,6 +117,7 @@ export function createGame(config: GameConfig): GameState {
     spawnPoolMax: config.spawnPoolMax,
     prngState,
     events: [],
+    lastEvents: [],
   };
 }
 
@@ -344,6 +345,7 @@ export function applyAction(state: GameState, action: Action): GameState {
         spawnPoolMax: newSpawnPoolMax,
         prngState: newPrng,
         events: [...state.events, ...newEvents],
+        lastEvents: newEvents,
       };
     }
   }
