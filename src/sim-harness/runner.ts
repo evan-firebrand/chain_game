@@ -7,13 +7,14 @@ import {
 } from '../game-kernel/fast/index.js';
 import type { GameResult, Strategy, StrategyName } from './types.js';
 import { makeStrategyRng, randomStrategy } from './strategies/random.js';
+import { greedyStrategy } from './strategies/greedy.js';
 
 // ─── Strategy registry ───────────────────────────────────────────────────────
 
 const STRATEGIES: Record<StrategyName, Strategy> = {
   random: randomStrategy,
-  // greedy and heuristic registered in 3.6 / 3.7
-  greedy: () => null,
+  greedy: greedyStrategy,
+  // heuristic registered in 3.7
   heuristic: () => null,
 };
 
