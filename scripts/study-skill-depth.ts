@@ -573,9 +573,259 @@ function renderGridReport(summaries: readonly CellSummary[], grandMs: number): s
   return lines.join('\n');
 }
 
+// ─── A.5d full d3 sweep mode (Path C) ────────────────────────────────────────
+
+interface CellTripleResult {
+  readonly cell: StudyCell;
+  readonly random: readonly GameResult[];
+  readonly d1: readonly GameResult[];
+  readonly d3: readonly GameResult[];
+  readonly wallClockMs: number;
+}
+
+function runCellTriple(cell: StudyCell, n: number): CellTripleResult {
+  const cfg = cellConfig(cell);
+  const t0 = Date.now();
+  const random: GameResult[] = [];
+  const d1: GameResult[] = [];
+  const d3: GameResult[] = [];
+  for (let i = 0; i < n; i++) {
+    const cfgI: GameConfig = { ...cfg, prngSeed: GRID_KERNEL_SEED_BASE + i };
+    random.push(playOneGame(cfgI, 'random', GRID_STRATEGY_SEED_BASE + i, { maxTurns: MAX_TURNS }));
+    d1.push(playOneGame(cfgI, 'search-d1', GRID_STRATEGY_SEED_BASE + i, { maxTurns: MAX_TURNS }));
+    d3.push(playOneGame(cfgI, 'search-d3', GRID_STRATEGY_SEED_BASE + i, { maxTurns: MAX_TURNS }));
+  }
+  return { cell, random, d1, d3, wallClockMs: Date.now() - t0 };
+}
+
+interface CellTripleSummary {
+  readonly cell: StudyCell;
+  readonly d3RTier: PairedDiff;
+  readonly d1RTier: PairedDiff;
+  readonly d3D1Tier: PairedDiff;
+  readonly d3RCpl: PairedDiff;
+  readonly d3RAcl: PairedDiff;
+  readonly capRandom: number;
+  readonly capD1: number;
+  readonly capD3: number;
+  readonly wallClockMs: number;
+}
+
+function summarizeTriple(r: CellTripleResult): CellTripleSummary {
+  const tierR = extract(r.random, (g) => tier(g.outputs.maxTile));
+  const tierD1 = extract(r.d1, (g) => tier(g.outputs.maxTile));
+  const tierD3 = extract(r.d3, (g) => tier(g.outputs.maxTile));
+  const cplR = extract(r.random, (g) => g.outputs.chainsPerLevel);
+  const cplD3 = extract(r.d3, (g) => g.outputs.chainsPerLevel);
+  const aclR = extract(r.random, (g) => g.outputs.avgChainLength);
+  const aclD3 = extract(r.d3, (g) => g.outputs.avgChainLength);
+  return {
+    cell: r.cell,
+    d3RTier: pairedDiff(tierD3, tierR),
+    d1RTier: pairedDiff(tierD1, tierR),
+    d3D1Tier: pairedDiff(tierD3, tierD1),
+    d3RCpl: pairedDiff(cplD3, cplR),
+    d3RAcl: pairedDiff(aclD3, aclR),
+    capRandom: r.random.filter((g) => g.outputs.endedByTurnCap).length / r.random.length,
+    capD1: r.d1.filter((g) => g.outputs.endedByTurnCap).length / r.d1.length,
+    capD3: r.d3.filter((g) => g.outputs.endedByTurnCap).length / r.d3.length,
+    wallClockMs: r.wallClockMs,
+  };
+}
+
 function modeD3Selective(): void {
-  console.log('A.5d d3-selective — not implemented yet.');
-  process.exit(2);
+  // First, append the A.5c triage decision.
+  const triage: string[] = [];
+  triage.push('\n---\n');
+  triage.push('## A.5c — Triage decision\n');
+  triage.push(`**Generated:** ${new Date().toISOString().slice(0, 10)}`);
+  triage.push('');
+  triage.push('**Path chosen: C (full 54-cell d3 grid).**');
+  triage.push('');
+  triage.push('Rationale: A.5a calibration measured mean d3 wall-clock at 187 ms/game (worst cell 489 ms). A full 54-cell × 50-game d3 grid projects to ~8 min at mean rate / ~22 min worst-case — both comfortably inside the 3 CPU-hr budget. Triage gating was designed to skip d3 in cells where d1≈random; given the actual cost, that economy is unnecessary.');
+  triage.push('');
+  triage.push('A.5b also surfaced wide spread variation across cells (0.14 to 2.70 tier on d1−random). Running d3 on the full grid lets us see whether the d1 ranking holds at d3, and where mastery headroom (d3−d1) actually appears.');
+  triage.push('');
+  appendFileSync(STUDY_PATH, triage.join('\n'));
+
+  const cells = buildGrid();
+  console.log(`A.5d full d3 sweep (Path C): ${cells.length} cells × ${GRID_GAMES} paired games × {random, d1, d3}, ${MAX_TURNS}-turn cap`);
+  const summaries: CellTripleSummary[] = [];
+  let grandMs = 0;
+  let lastFlushMs = 0;
+  for (let i = 0; i < cells.length; i++) {
+    const cell = cells[i]!;
+    const r = runCellTriple(cell, GRID_GAMES);
+    grandMs += r.wallClockMs;
+    summaries.push(summarizeTriple(r));
+    if ((i + 1) % 5 === 0 || i === cells.length - 1 || (grandMs - lastFlushMs) > 60_000) {
+      console.log(`  [${i + 1}/${cells.length}] ${cell.id}: ${(r.wallClockMs / 1000).toFixed(2)}s (grand ${(grandMs / 1000).toFixed(0)}s)`);
+      lastFlushMs = grandMs;
+    }
+  }
+  appendFileSync(STUDY_PATH, renderD3Report(summaries, grandMs));
+  console.log(`Appended d3 report to ${STUDY_PATH}`);
+  console.log(`Total wall-clock: ${(grandMs / 1000).toFixed(1)}s`);
+}
+
+function renderD3Report(summaries: readonly CellTripleSummary[], grandMs: number): string {
+  const lines: string[] = [];
+  lines.push('\n---\n');
+  lines.push('## A.5d — Full d3 sweep (Path C)\n');
+  lines.push(`**Generated:** ${new Date().toISOString().slice(0, 10)}`);
+  lines.push(`**Inputs:** 54 cells × ${GRID_GAMES} paired games × {random, d1, d3}, ${MAX_TURNS}-turn cap, kernel seed ${GRID_KERNEL_SEED_BASE}+i.`);
+  lines.push(`**Wall-clock:** ${(grandMs / 1000 / 60).toFixed(1)} min (${(grandMs / 1000).toFixed(1)}s).\n`);
+
+  const sorted = [...summaries].sort((a, b) => b.d3RTier.mean - a.d3RTier.mean);
+
+  lines.push('### Per-cell paired tier spreads\n');
+  lines.push('| cell | k | board | weights | pool | Δ tier d3−r | Δ tier d1−r | Δ tier d3−d1 (headroom) | %cap r→d1→d3 |');
+  lines.push('|---|---:|---|---|---:|---:|---:|---:|---:|');
+  for (const s of sorted) {
+    lines.push(
+      `| \`${s.cell.id}\` | ${s.cell.ruleK} | ${s.cell.gridRows}×${s.cell.gridCols} | ${s.cell.weightShape} | ${s.cell.poolCount} ` +
+        `| ${s.d3RTier.mean.toFixed(2)} ± ${s.d3RTier.ci95.toFixed(2)} ` +
+        `| ${s.d1RTier.mean.toFixed(2)} ± ${s.d1RTier.ci95.toFixed(2)} ` +
+        `| ${s.d3D1Tier.mean.toFixed(2)} ± ${s.d3D1Tier.ci95.toFixed(2)} ` +
+        `| ${(s.capRandom * 100).toFixed(0)}%→${(s.capD1 * 100).toFixed(0)}%→${(s.capD3 * 100).toFixed(0)}% |`,
+    );
+  }
+  lines.push('');
+
+  // Marginal: d3−random (total depth)
+  const marginal = (
+    label: string,
+    groups: ReadonlyArray<{ label: string; cells: readonly CellTripleSummary[] }>,
+    extractFn: (s: CellTripleSummary) => number,
+  ): void => {
+    lines.push(`#### ${label}\n`);
+    lines.push(`| value | mean Δ | min cell Δ | max cell Δ | n cells |`);
+    lines.push('|---|---:|---:|---:|---:|');
+    for (const g of groups) {
+      const xs = g.cells.map(extractFn);
+      const minVal = xs.length > 0 ? Math.min(...xs) : 0;
+      const maxVal = xs.length > 0 ? Math.max(...xs) : 0;
+      lines.push(`| ${g.label} | ${mean(xs).toFixed(2)} | ${minVal.toFixed(2)} | ${maxVal.toFixed(2)} | ${xs.length} |`);
+    }
+    lines.push('');
+  };
+
+  lines.push('### Marginal effects on Δ tier (d3 − random)\n');
+  marginal(
+    'Marginal: ruleK',
+    [
+      { label: '1', cells: summaries.filter((s) => s.cell.ruleK === 1) },
+      { label: '2', cells: summaries.filter((s) => s.cell.ruleK === 2) },
+      { label: '3', cells: summaries.filter((s) => s.cell.ruleK === 3) },
+    ],
+    (s) => s.d3RTier.mean,
+  );
+  marginal(
+    'Marginal: board',
+    [
+      { label: '6×5', cells: summaries.filter((s) => s.cell.gridRows === 6) },
+      { label: '7×6', cells: summaries.filter((s) => s.cell.gridRows === 7) },
+      { label: '9×8', cells: summaries.filter((s) => s.cell.gridRows === 9) },
+    ],
+    (s) => s.d3RTier.mean,
+  );
+  marginal(
+    'Marginal: spawnWeights',
+    [
+      { label: 'flat', cells: summaries.filter((s) => s.cell.weightShape === 'flat') },
+      { label: 'default', cells: summaries.filter((s) => s.cell.weightShape === 'default') },
+      { label: 'steep', cells: summaries.filter((s) => s.cell.weightShape === 'steep') },
+    ],
+    (s) => s.d3RTier.mean,
+  );
+  marginal(
+    'Marginal: poolCount',
+    [
+      { label: '8 (max=256)', cells: summaries.filter((s) => s.cell.poolCount === 8) },
+      { label: '12 (max=4096)', cells: summaries.filter((s) => s.cell.poolCount === 12) },
+    ],
+    (s) => s.d3RTier.mean,
+  );
+
+  lines.push('### Marginal effects on Δ tier (d3 − d1: mastery headroom)\n');
+  marginal(
+    'Marginal: ruleK',
+    [
+      { label: '1', cells: summaries.filter((s) => s.cell.ruleK === 1) },
+      { label: '2', cells: summaries.filter((s) => s.cell.ruleK === 2) },
+      { label: '3', cells: summaries.filter((s) => s.cell.ruleK === 3) },
+    ],
+    (s) => s.d3D1Tier.mean,
+  );
+  marginal(
+    'Marginal: board',
+    [
+      { label: '6×5', cells: summaries.filter((s) => s.cell.gridRows === 6) },
+      { label: '7×6', cells: summaries.filter((s) => s.cell.gridRows === 7) },
+      { label: '9×8', cells: summaries.filter((s) => s.cell.gridRows === 9) },
+    ],
+    (s) => s.d3D1Tier.mean,
+  );
+  marginal(
+    'Marginal: spawnWeights',
+    [
+      { label: 'flat', cells: summaries.filter((s) => s.cell.weightShape === 'flat') },
+      { label: 'default', cells: summaries.filter((s) => s.cell.weightShape === 'default') },
+      { label: 'steep', cells: summaries.filter((s) => s.cell.weightShape === 'steep') },
+    ],
+    (s) => s.d3D1Tier.mean,
+  );
+  marginal(
+    'Marginal: poolCount',
+    [
+      { label: '8 (max=256)', cells: summaries.filter((s) => s.cell.poolCount === 8) },
+      { label: '12 (max=4096)', cells: summaries.filter((s) => s.cell.poolCount === 12) },
+    ],
+    (s) => s.d3D1Tier.mean,
+  );
+
+  // Top-5 / bottom-5 by d3-random
+  lines.push('### Top-5 cells by Δ tier (d3 − random)\n');
+  lines.push('| rank | cell | Δ d3−r | Δ d1−r | Δ d3−d1 |');
+  lines.push('|---:|---|---:|---:|---:|');
+  for (let i = 0; i < Math.min(5, sorted.length); i++) {
+    const s = sorted[i]!;
+    lines.push(`| ${i + 1} | \`${s.cell.id}\` | ${s.d3RTier.mean.toFixed(2)} ± ${s.d3RTier.ci95.toFixed(2)} | ${s.d1RTier.mean.toFixed(2)} ± ${s.d1RTier.ci95.toFixed(2)} | ${s.d3D1Tier.mean.toFixed(2)} ± ${s.d3D1Tier.ci95.toFixed(2)} |`);
+  }
+  lines.push('');
+  lines.push('### Bottom-5 cells by Δ tier (d3 − random)\n');
+  lines.push('| rank | cell | Δ d3−r | Δ d1−r | Δ d3−d1 |');
+  lines.push('|---:|---|---:|---:|---:|');
+  for (let i = 0; i < Math.min(5, sorted.length); i++) {
+    const s = sorted[sorted.length - 1 - i]!;
+    lines.push(`| ${i + 1} | \`${s.cell.id}\` | ${s.d3RTier.mean.toFixed(2)} ± ${s.d3RTier.ci95.toFixed(2)} | ${s.d1RTier.mean.toFixed(2)} ± ${s.d1RTier.ci95.toFixed(2)} | ${s.d3D1Tier.mean.toFixed(2)} ± ${s.d3D1Tier.ci95.toFixed(2)} |`);
+  }
+  lines.push('');
+
+  // Mastery-headroom cells (d3 > d1)
+  const headroomSorted = [...summaries].sort((a, b) => b.d3D1Tier.mean - a.d3D1Tier.mean);
+  lines.push('### Top-10 cells by mastery headroom (d3 − d1)\n');
+  lines.push('Largest gaps between d3 and d1 — cells where look-ahead beyond depth-1 actually helps.');
+  lines.push('');
+  lines.push('| rank | cell | Δ d3−d1 ± CI | Δ d3−r | %cap d1→d3 |');
+  lines.push('|---:|---|---:|---:|---:|');
+  for (let i = 0; i < Math.min(10, headroomSorted.length); i++) {
+    const s = headroomSorted[i]!;
+    lines.push(`| ${i + 1} | \`${s.cell.id}\` | ${s.d3D1Tier.mean.toFixed(2)} ± ${s.d3D1Tier.ci95.toFixed(2)} | ${s.d3RTier.mean.toFixed(2)} ± ${s.d3RTier.ci95.toFixed(2)} | ${(s.capD1 * 100).toFixed(0)}%→${(s.capD3 * 100).toFixed(0)}% |`);
+  }
+  lines.push('');
+
+  // Headline summary
+  const allD3RTier = summaries.map((s) => s.d3RTier.mean);
+  const allD3D1Tier = summaries.map((s) => s.d3D1Tier.mean);
+  const allCapBound = summaries.filter((s) => s.capRandom >= 0.99 && s.capD1 >= 0.99 && s.capD3 >= 0.99).length;
+  lines.push('### Headline summary\n');
+  lines.push(`- Mean Δ tier (d3 − random) across the 54-cell scoped world: **${mean(allD3RTier).toFixed(2)}** (range ${Math.min(...allD3RTier).toFixed(2)} to ${Math.max(...allD3RTier).toFixed(2)}).`);
+  lines.push(`- Mean Δ tier (d3 − d1) across the scoped world: **${mean(allD3D1Tier).toFixed(2)}** (range ${Math.min(...allD3D1Tier).toFixed(2)} to ${Math.max(...allD3D1Tier).toFixed(2)}).`);
+  lines.push(`- ${allCapBound}/${summaries.length} cells fully cap-truncated for all 3 strategies.`);
+  lines.push('');
+
+  return lines.join('\n');
 }
 
 // ─── CLI ─────────────────────────────────────────────────────────────────────
