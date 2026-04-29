@@ -17,41 +17,79 @@ export function lcgFloat(state: number): number {
   return state / 0x100000000;
 }
 
-/**
- * Pick a tile value from the spawn pool using weighted random selection.
- */
-export function pickTileValue(
-  config: Pick<GameConfig, 'spawnPoolMin' | 'spawnPoolMax' | 'spawnWeights'>,
-  rand: number,
-): TileValue {
-  const entries: [TileValue, number][] = [];
-  let totalWeight = 0;
+// ─── Spawn-weight CDF cache ──────────────────────────────────────────────────
+// Each call to pickTileValue used to rebuild the (value, weight) table from
+// scratch. The table is fully determined by (spawnPoolMin, spawnPoolMax,
+// spawnWeights) which is constant within a game, so we cache it per-config
+// in a WeakMap. Cache lifetime tracks the config object — when callers
+// release the config, the GC reclaims the table automatically.
+
+interface CdfTable {
+  /** Tile values in spawn order (min → max), only those with weight > 0. */
+  readonly values: readonly TileValue[];
+  /** Running sum of weights, parallel to `values`. */
+  readonly cumulative: readonly number[];
+  /** Last entry of `cumulative`, cached for O(1) access. */
+  readonly total: number;
+}
+
+type SpawnConfig = Pick<GameConfig, 'spawnPoolMin' | 'spawnPoolMax' | 'spawnWeights'>;
+
+const cdfCache: WeakMap<SpawnConfig, CdfTable> = new WeakMap();
+
+function buildCdf(config: SpawnConfig): CdfTable {
+  const values: TileValue[] = [];
+  const cumulative: number[] = [];
+  let total = 0;
 
   let v = config.spawnPoolMin;
   while (v <= config.spawnPoolMax) {
     /* v8 ignore next 1 */
     const weight = config.spawnWeights[v] ?? 0;
     if (weight > 0) {
-      entries.push([v, weight]);
-      totalWeight += weight;
+      values.push(v);
+      total += weight;
+      cumulative.push(total);
     }
     v = (v * 2) as TileValue;
   }
 
+  return { values, cumulative, total };
+}
+
+function getCdf(config: SpawnConfig): CdfTable {
+  let table = cdfCache.get(config);
+  if (table === undefined) {
+    table = buildCdf(config);
+    cdfCache.set(config, table);
+  }
+  return table;
+}
+
+/**
+ * Pick a tile value from the spawn pool using weighted random selection.
+ * Uses a cached cumulative-weight table; cache key is the config object.
+ */
+export function pickTileValue(config: SpawnConfig, rand: number): TileValue {
+  const table = getCdf(config);
+
   /* v8 ignore next 3 */
-  if (totalWeight === 0 || entries.length === 0) {
+  if (table.total === 0 || table.values.length === 0) {
     return config.spawnPoolMin;
   }
 
-  let threshold = rand * totalWeight;
-  for (const [val, weight] of entries) {
-    threshold -= weight;
-    if (threshold <= 0) {
-      return val;
+  // Match the original's `threshold -= weight; if (threshold <= 0)` semantic
+  // exactly — i.e., return at the first bucket whose cumulative weight is
+  // >= rand*total. Using strict `<` here would diverge at exact-boundary
+  // rand values that the original would resolve into the earlier bucket.
+  const threshold = rand * table.total;
+  for (let i = 0; i < table.values.length; i++) {
+    if (threshold <= (table.cumulative[i] as number)) {
+      return table.values[i] as TileValue;
     }
-    /* v8 ignore next 1 */
   }
+
   /* v8 ignore next 2 */
-  const last = entries[entries.length - 1];
-  return last !== undefined ? last[0] : config.spawnPoolMin;
+  const last = table.values[table.values.length - 1];
+  return last !== undefined ? last : config.spawnPoolMin;
 }
