@@ -828,6 +828,233 @@ function renderD3Report(summaries: readonly CellTripleSummary[], grandMs: number
   return lines.join('\n');
 }
 
+// ─── Phase 1.5 follow-up mode ────────────────────────────────────────────────
+
+const PHASE15_GAMES = 50;
+const PHASE15_KERNEL_SEED_BASE = 4000;
+const PHASE15_STRATEGY_SEED_BASE = 0;
+
+interface CellWithCap {
+  readonly cell: StudyCell;
+  readonly maxTurns: number;
+}
+
+function runCellTripleAtCap(cell: StudyCell, n: number, maxTurns: number): CellTripleResult {
+  const cfg = cellConfig(cell);
+  const t0 = Date.now();
+  const random: GameResult[] = [];
+  const d1: GameResult[] = [];
+  const d3: GameResult[] = [];
+  for (let i = 0; i < n; i++) {
+    const cfgI: GameConfig = { ...cfg, prngSeed: PHASE15_KERNEL_SEED_BASE + i };
+    random.push(playOneGame(cfgI, 'random', PHASE15_STRATEGY_SEED_BASE + i, { maxTurns }));
+    d1.push(playOneGame(cfgI, 'search-d1', PHASE15_STRATEGY_SEED_BASE + i, { maxTurns }));
+    d3.push(playOneGame(cfgI, 'search-d3', PHASE15_STRATEGY_SEED_BASE + i, { maxTurns }));
+  }
+  return { cell, random, d1, d3, wallClockMs: Date.now() - t0 };
+}
+
+interface QuadResult {
+  readonly cell: StudyCell;
+  readonly random: readonly GameResult[];
+  readonly d1: readonly GameResult[];
+  readonly d2: readonly GameResult[];
+  readonly d3: readonly GameResult[];
+  readonly wallClockMs: number;
+}
+
+function runCellQuad(cell: StudyCell, n: number, maxTurns: number): QuadResult {
+  const cfg = cellConfig(cell);
+  const t0 = Date.now();
+  const random: GameResult[] = [];
+  const d1: GameResult[] = [];
+  const d2: GameResult[] = [];
+  const d3: GameResult[] = [];
+  for (let i = 0; i < n; i++) {
+    const cfgI: GameConfig = { ...cfg, prngSeed: PHASE15_KERNEL_SEED_BASE + i };
+    random.push(playOneGame(cfgI, 'random', PHASE15_STRATEGY_SEED_BASE + i, { maxTurns }));
+    d1.push(playOneGame(cfgI, 'search-d1', PHASE15_STRATEGY_SEED_BASE + i, { maxTurns }));
+    d2.push(playOneGame(cfgI, 'search-d2', PHASE15_STRATEGY_SEED_BASE + i, { maxTurns }));
+    d3.push(playOneGame(cfgI, 'search-d3', PHASE15_STRATEGY_SEED_BASE + i, { maxTurns }));
+  }
+  return { cell, random, d1, d2, d3, wallClockMs: Date.now() - t0 };
+}
+
+// F.2 — Cap-extension on top-5 d3−random cells
+const F2_CELLS: readonly StudyCell[] = [
+  { id: 'k1_9x8_steep_pool8', ruleK: 1, gridRows: 9, gridCols: 8, weightShape: 'steep', poolCount: 8 },
+  { id: 'k1_9x8_steep_pool12', ruleK: 1, gridRows: 9, gridCols: 8, weightShape: 'steep', poolCount: 12 },
+  { id: 'k1_7x6_steep_pool8', ruleK: 1, gridRows: 7, gridCols: 6, weightShape: 'steep', poolCount: 8 },
+  { id: 'k1_7x6_steep_pool12', ruleK: 1, gridRows: 7, gridCols: 6, weightShape: 'steep', poolCount: 12 },
+  { id: 'k1_9x8_default_pool8', ruleK: 1, gridRows: 9, gridCols: 8, weightShape: 'default', poolCount: 8 },
+];
+const F2_CAPS: readonly number[] = [50, 100, 200];
+
+// F.3 — Larger-board sweep at k=1, steep, pool=8 (compare against 9×8 baseline)
+const F3_CELLS: readonly StudyCell[] = [
+  { id: 'k1_9x8_steep_pool8', ruleK: 1, gridRows: 9, gridCols: 8, weightShape: 'steep', poolCount: 8 },
+  { id: 'k1_10x8_steep_pool8', ruleK: 1, gridRows: 10, gridCols: 8, weightShape: 'steep', poolCount: 8 },
+  { id: 'k1_12x10_steep_pool8', ruleK: 1, gridRows: 12, gridCols: 10, weightShape: 'steep', poolCount: 8 },
+];
+
+// F.4 — d2 ladder on top-5 mastery-headroom cells (cap=50)
+const F4_CELLS: readonly StudyCell[] = [
+  { id: 'k1_6x5_flat_pool12', ruleK: 1, gridRows: 6, gridCols: 5, weightShape: 'flat', poolCount: 12 },
+  { id: 'k1_7x6_flat_pool8', ruleK: 1, gridRows: 7, gridCols: 6, weightShape: 'flat', poolCount: 8 },
+  { id: 'k1_9x8_default_pool8', ruleK: 1, gridRows: 9, gridCols: 8, weightShape: 'default', poolCount: 8 },
+  { id: 'k1_6x5_flat_pool8', ruleK: 1, gridRows: 6, gridCols: 5, weightShape: 'flat', poolCount: 8 },
+  { id: 'k1_6x5_steep_pool8', ruleK: 1, gridRows: 6, gridCols: 5, weightShape: 'steep', poolCount: 8 },
+];
+
+function modePhase15(): void {
+  console.log('Phase 1.5: F.2 cap-extension + F.3 larger boards + F.4 d2 ladder');
+
+  const lines: string[] = [];
+  lines.push('\n---\n');
+  lines.push('## Phase 1.5 — Follow-up experiments\n');
+  lines.push(`**Generated:** ${new Date().toISOString().slice(0, 10)}`);
+  lines.push('');
+  lines.push('Triggered by A.6 synthesis: (F.2) test whether the 50-turn cap is masking d3 mastery headroom; (F.3) test whether the board-size slope keeps rising past 9×8; (F.4) add d2 between d1 and d3 on the highest-headroom cells to check whether the gradient is monotonic.');
+  lines.push('');
+  lines.push('Seeds reset for Phase 1.5: kernel seed base = 4000, strategy seed base = 0. Same paired-seed protocol: game `i` for any strategy/cap uses the same kernel seed.');
+  lines.push('');
+
+  // ─── F.2: cap-extension ───────────────────────────────────────────────────
+  lines.push('### F.2 — Cap-extension on top-5 d3−random cells\n');
+  lines.push(`5 cells × 3 caps {50, 100, 200} × ${PHASE15_GAMES} paired games × {random, d1, d3}.\n`);
+  console.log(`F.2: ${F2_CELLS.length} cells × ${F2_CAPS.length} caps × ${PHASE15_GAMES} games × 3 strategies`);
+
+  const f2: { cell: StudyCell; cap: number; sum: CellTripleSummary }[] = [];
+  let f2Ms = 0;
+  for (const cell of F2_CELLS) {
+    for (const cap of F2_CAPS) {
+      const r = runCellTripleAtCap(cell, PHASE15_GAMES, cap);
+      f2Ms += r.wallClockMs;
+      const sum = summarizeTriple(r);
+      f2.push({ cell, cap, sum });
+      console.log(`  ${cell.id} cap=${cap}: ${(r.wallClockMs / 1000).toFixed(2)}s`);
+    }
+  }
+
+  lines.push('| cell | cap | Δ tier d3−r ± CI | Δ tier d3−d1 ± CI | %cap r→d1→d3 |');
+  lines.push('|---|---:|---:|---:|---:|');
+  for (const { cell, cap, sum } of f2) {
+    lines.push(
+      `| \`${cell.id}\` | ${cap} ` +
+        `| ${sum.d3RTier.mean.toFixed(2)} ± ${sum.d3RTier.ci95.toFixed(2)} ` +
+        `| ${sum.d3D1Tier.mean.toFixed(2)} ± ${sum.d3D1Tier.ci95.toFixed(2)} ` +
+        `| ${(sum.capRandom * 100).toFixed(0)}%→${(sum.capD1 * 100).toFixed(0)}%→${(sum.capD3 * 100).toFixed(0)}% |`,
+    );
+  }
+  lines.push('');
+
+  lines.push('#### F.2 cap-trend per cell (does mastery headroom grow?)\n');
+  lines.push('| cell | Δ d3−r @50 | Δ d3−r @100 | Δ d3−r @200 | Δ d3−d1 @50 | Δ d3−d1 @100 | Δ d3−d1 @200 |');
+  lines.push('|---|---:|---:|---:|---:|---:|---:|');
+  for (const cell of F2_CELLS) {
+    const rows = F2_CAPS.map((cap) => f2.find((x) => x.cell.id === cell.id && x.cap === cap)!);
+    lines.push(
+      `| \`${cell.id}\` ` +
+        rows.map((r) => `| ${r.sum.d3RTier.mean.toFixed(2)}`).join(' ') +
+        ' ' +
+        rows.map((r) => `| ${r.sum.d3D1Tier.mean.toFixed(2)}`).join(' ') +
+        ' |',
+    );
+  }
+  lines.push('');
+
+  // F.2 headline summary
+  const meanD3RAtCap = (cap: number): number => mean(f2.filter((x) => x.cap === cap).map((x) => x.sum.d3RTier.mean));
+  const meanD3D1AtCap = (cap: number): number => mean(f2.filter((x) => x.cap === cap).map((x) => x.sum.d3D1Tier.mean));
+  lines.push('#### F.2 headline\n');
+  lines.push(`- Mean Δ tier (d3 − random) across these 5 cells: cap=50: **${meanD3RAtCap(50).toFixed(2)}**, cap=100: **${meanD3RAtCap(100).toFixed(2)}**, cap=200: **${meanD3RAtCap(200).toFixed(2)}**.`);
+  lines.push(`- Mean Δ tier (d3 − d1, mastery headroom) across these 5 cells: cap=50: **${meanD3D1AtCap(50).toFixed(2)}**, cap=100: **${meanD3D1AtCap(100).toFixed(2)}**, cap=200: **${meanD3D1AtCap(200).toFixed(2)}**.`);
+  lines.push(`- F.2 total wall-clock: ${(f2Ms / 1000).toFixed(1)}s.`);
+  lines.push('');
+
+  // ─── F.3: larger boards ───────────────────────────────────────────────────
+  lines.push('### F.3 — Larger-board sweep at k=1, steep, pool=8 (cap=50)\n');
+  lines.push(`${F3_CELLS.length} cells × ${PHASE15_GAMES} paired games × {random, d1, d3}, ${MAX_TURNS}-turn cap.\n`);
+  console.log(`F.3: ${F3_CELLS.length} cells × ${PHASE15_GAMES} games × 3 strategies`);
+
+  const f3: CellTripleSummary[] = [];
+  let f3Ms = 0;
+  for (const cell of F3_CELLS) {
+    const r = runCellTripleAtCap(cell, PHASE15_GAMES, MAX_TURNS);
+    f3Ms += r.wallClockMs;
+    f3.push(summarizeTriple(r));
+    console.log(`  ${cell.id}: ${(r.wallClockMs / 1000).toFixed(2)}s`);
+  }
+  lines.push('| cell | board | board cells | Δ tier d3−r | Δ tier d3−d1 | %cap r→d1→d3 |');
+  lines.push('|---|---|---:|---:|---:|---:|');
+  for (const sum of f3) {
+    const cells = sum.cell.gridRows * sum.cell.gridCols;
+    lines.push(
+      `| \`${sum.cell.id}\` | ${sum.cell.gridRows}×${sum.cell.gridCols} | ${cells} ` +
+        `| ${sum.d3RTier.mean.toFixed(2)} ± ${sum.d3RTier.ci95.toFixed(2)} ` +
+        `| ${sum.d3D1Tier.mean.toFixed(2)} ± ${sum.d3D1Tier.ci95.toFixed(2)} ` +
+        `| ${(sum.capRandom * 100).toFixed(0)}%→${(sum.capD1 * 100).toFixed(0)}%→${(sum.capD3 * 100).toFixed(0)}% |`,
+    );
+  }
+  lines.push('');
+  lines.push(`F.3 total wall-clock: ${(f3Ms / 1000).toFixed(1)}s.`);
+  lines.push('');
+
+  // ─── F.4: d2 ladder on top-headroom cells ──────────────────────────────
+  lines.push('### F.4 — d2 ladder on top-5 mastery-headroom cells (cap=50)\n');
+  lines.push(`${F4_CELLS.length} cells × ${PHASE15_GAMES} paired games × {random, d1, d2, d3}, ${MAX_TURNS}-turn cap.\n`);
+  console.log(`F.4: ${F4_CELLS.length} cells × ${PHASE15_GAMES} games × 4 strategies`);
+
+  let f4Ms = 0;
+  interface F4Row {
+    readonly cell: StudyCell;
+    readonly tierR: number;
+    readonly tierD1: number;
+    readonly tierD2: number;
+    readonly tierD3: number;
+    readonly d2D1: PairedDiff;
+    readonly d3D2: PairedDiff;
+    readonly d3D1: PairedDiff;
+  }
+  const f4Rows: F4Row[] = [];
+  for (const cell of F4_CELLS) {
+    const q = runCellQuad(cell, PHASE15_GAMES, MAX_TURNS);
+    f4Ms += q.wallClockMs;
+    const tierRs = extract(q.random, (g) => tier(g.outputs.maxTile));
+    const tierD1s = extract(q.d1, (g) => tier(g.outputs.maxTile));
+    const tierD2s = extract(q.d2, (g) => tier(g.outputs.maxTile));
+    const tierD3s = extract(q.d3, (g) => tier(g.outputs.maxTile));
+    f4Rows.push({
+      cell,
+      tierR: mean(tierRs),
+      tierD1: mean(tierD1s),
+      tierD2: mean(tierD2s),
+      tierD3: mean(tierD3s),
+      d2D1: pairedDiff(tierD2s, tierD1s),
+      d3D2: pairedDiff(tierD3s, tierD2s),
+      d3D1: pairedDiff(tierD3s, tierD1s),
+    });
+    console.log(`  ${cell.id}: ${(q.wallClockMs / 1000).toFixed(2)}s`);
+  }
+  lines.push('| cell | tier r | tier d1 | tier d2 | tier d3 | Δ d2−d1 ± CI | Δ d3−d2 ± CI | Δ d3−d1 ± CI |');
+  lines.push('|---|---:|---:|---:|---:|---:|---:|---:|');
+  for (const r of f4Rows) {
+    lines.push(
+      `| \`${r.cell.id}\` | ${r.tierR.toFixed(2)} | ${r.tierD1.toFixed(2)} | ${r.tierD2.toFixed(2)} | ${r.tierD3.toFixed(2)} ` +
+        `| ${r.d2D1.mean.toFixed(2)} ± ${r.d2D1.ci95.toFixed(2)} ` +
+        `| ${r.d3D2.mean.toFixed(2)} ± ${r.d3D2.ci95.toFixed(2)} ` +
+        `| ${r.d3D1.mean.toFixed(2)} ± ${r.d3D1.ci95.toFixed(2)} |`,
+    );
+  }
+  lines.push('');
+  lines.push(`F.4 total wall-clock: ${(f4Ms / 1000).toFixed(1)}s.`);
+  lines.push('');
+
+  appendFileSync(STUDY_PATH, lines.join('\n'));
+  console.log(`Appended Phase 1.5 to ${STUDY_PATH}`);
+  console.log(`Phase 1.5 grand total: ${((f2Ms + f3Ms + f4Ms) / 1000 / 60).toFixed(1)} min`);
+}
+
 // ─── CLI ─────────────────────────────────────────────────────────────────────
 
 function main(): void {
@@ -845,8 +1072,11 @@ function main(): void {
     case 'd3-selective':
       modeD3Selective();
       break;
+    case 'phase15':
+      modePhase15();
+      break;
     default:
-      console.error(`Unknown mode: ${mode}. Expected one of: baseline | calibration | grid | d3-selective`);
+      console.error(`Unknown mode: ${mode}. Expected one of: baseline | calibration | grid | d3-selective | phase15`);
       process.exit(1);
   }
 }
