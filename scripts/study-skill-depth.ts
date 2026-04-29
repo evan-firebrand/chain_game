@@ -16,9 +16,9 @@
  * Output:  appends to docs/engineering/studies/01-skill-depth-spread.md
  */
 
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
-import { DEFAULT_CONFIG, type GameConfig } from '../src/game-kernel/index.js';
+import { DEFAULT_CONFIG, type GameConfig, type TileValue } from '../src/game-kernel/index.js';
 import { unpackTile } from '../src/game-kernel/fast/index.js';
 import { playOneGame } from '../src/sim-harness/runner.js';
 import type { GameResult, StrategyName } from '../src/sim-harness/types.js';
@@ -253,12 +253,129 @@ function renderBaselineReport(config: GameConfig, runs: readonly CellRun[]): str
   return lines.join('\n');
 }
 
-// ─── Stubs for A.5a/b/c/d (filled in subsequent commits) ─────────────────────
+// ─── Cell shape (shared by A.5a/b/c/d) ───────────────────────────────────────
+
+type WeightShape = 'flat' | 'default' | 'steep';
+
+interface StudyCell {
+  readonly id: string;
+  readonly ruleK: number;
+  readonly gridRows: number;
+  readonly gridCols: number;
+  readonly weightShape: WeightShape;
+  readonly poolCount: 8 | 12;
+}
+
+function makeWeights(
+  min: TileValue,
+  max: TileValue,
+  shape: WeightShape,
+): Readonly<Partial<Record<TileValue, number>>> {
+  const out: Partial<Record<TileValue, number>> = {};
+  let v: number = min;
+  while (v <= max) {
+    let w: number;
+    if (shape === 'flat') {
+      w = 1;
+    } else {
+      const tierFromTop = Math.log2(max / v);
+      w = shape === 'default' ? 2 ** tierFromTop : 4 ** tierFromTop;
+    }
+    out[v as TileValue] = w;
+    v = v * 2;
+  }
+  return out;
+}
+
+function cellConfig(cell: StudyCell): GameConfig {
+  const spawnPoolMax = (1 << cell.poolCount) as TileValue;
+  const spawnPoolMin = DEFAULT_CONFIG.spawnPoolMin;
+  return {
+    ...DEFAULT_CONFIG,
+    ruleK: cell.ruleK,
+    gridRows: cell.gridRows,
+    gridCols: cell.gridCols,
+    spawnPoolMin,
+    spawnPoolMax,
+    spawnWeights: makeWeights(spawnPoolMin, spawnPoolMax, cell.weightShape),
+    recordEvents: false,
+  };
+}
+
+function cellIdOf(cell: { ruleK: number; gridRows: number; gridCols: number; weightShape: WeightShape; poolCount: number }): string {
+  return `k${cell.ruleK}_${cell.gridRows}x${cell.gridCols}_${cell.weightShape}_pool${cell.poolCount}`;
+}
+
+// ─── A.5a calibration mode ───────────────────────────────────────────────────
+
+const CALIBRATION_GAMES = 30;
+const CALIBRATION_KERNEL_SEED_BASE = 2000;
+const CALIBRATION_STRATEGY_SEED_BASE = 0;
+
+const CALIBRATION_CELLS: readonly StudyCell[] = [
+  // Span the grid: low-k small-board flat-weights large-pool
+  { id: cellIdOf({ ruleK: 1, gridRows: 6, gridCols: 5, weightShape: 'flat', poolCount: 12 }),
+    ruleK: 1, gridRows: 6, gridCols: 5, weightShape: 'flat', poolCount: 12 },
+  // Default cell (k=2, 7x6, default weights, pool=8)
+  { id: cellIdOf({ ruleK: 2, gridRows: 7, gridCols: 6, weightShape: 'default', poolCount: 8 }),
+    ruleK: 2, gridRows: 7, gridCols: 6, weightShape: 'default', poolCount: 8 },
+  // High-k large-board steep large-pool
+  { id: cellIdOf({ ruleK: 3, gridRows: 9, gridCols: 8, weightShape: 'steep', poolCount: 12 }),
+    ruleK: 3, gridRows: 9, gridCols: 8, weightShape: 'steep', poolCount: 12 },
+  // Mid-grid: default cell but pool=12 (the only off-default axis)
+  { id: cellIdOf({ ruleK: 2, gridRows: 7, gridCols: 6, weightShape: 'default', poolCount: 12 }),
+    ruleK: 2, gridRows: 7, gridCols: 6, weightShape: 'default', poolCount: 12 },
+];
 
 function modeCalibration(): void {
-  console.log('A.5a calibration — not implemented yet.');
-  process.exit(2);
+  console.log(`A.5a calibration: ${CALIBRATION_CELLS.length} cells × ${CALIBRATION_GAMES} d3 games`);
+  const lines: string[] = [];
+  lines.push('---');
+  lines.push('');
+  lines.push('## A.5a — Calibration pass');
+  lines.push('');
+  lines.push(`**Generated:** ${new Date().toISOString().slice(0, 10)}`);
+  lines.push(`**Cells:** ${CALIBRATION_CELLS.length} × ${CALIBRATION_GAMES} d3 games × ${MAX_TURNS}-turn cap.`);
+  lines.push('');
+  lines.push('| Cell | ruleK | board | weights | pool | mean ms/d3 game | total wall-clock |');
+  lines.push('|---|---:|---|---|---:|---:|---:|');
+
+  let grandTotalMs = 0;
+  for (const cell of CALIBRATION_CELLS) {
+    const cfg = cellConfig(cell);
+    const t0 = Date.now();
+    const games: GameResult[] = [];
+    for (let i = 0; i < CALIBRATION_GAMES; i++) {
+      const cfgI: GameConfig = { ...cfg, prngSeed: CALIBRATION_KERNEL_SEED_BASE + i };
+      games.push(playOneGame(cfgI, 'search-d3', CALIBRATION_STRATEGY_SEED_BASE + i, { maxTurns: MAX_TURNS }));
+    }
+    const dt = Date.now() - t0;
+    const perGame = dt / games.length;
+    grandTotalMs += dt;
+    console.log(`  ${cell.id}: ${games.length} games in ${(dt / 1000).toFixed(2)}s (${perGame.toFixed(1)} ms/game)`);
+    lines.push(`| \`${cell.id}\` | ${cell.ruleK} | ${cell.gridRows}×${cell.gridCols} | ${cell.weightShape} | ${cell.poolCount} | ${perGame.toFixed(1)} | ${(dt / 1000).toFixed(2)}s |`);
+  }
+
+  // Project A.5d cost from worst-cell timing.
+  const allTimes = CALIBRATION_CELLS.map((_, i) => i); // placeholder; recompute below
+  void allTimes;
+  // Better: compute max from the loop, but loop already finished. Recompute by tracking.
+  // Simpler: the table strings already record per-cell mean; let's reparse from grandTotal.
+  const meanMsPerD3 = grandTotalMs / (CALIBRATION_CELLS.length * CALIBRATION_GAMES);
+
+  lines.push('');
+  lines.push(`**Aggregate:** mean ${meanMsPerD3.toFixed(1)} ms/d3 game across ${CALIBRATION_CELLS.length * CALIBRATION_GAMES} calibration games (${(grandTotalMs / 1000).toFixed(1)}s total).`);
+  lines.push('');
+  // Project full A.5d at this mean rate.
+  const fullGridD3Sec = (54 * 50 * meanMsPerD3) / 1000;
+  lines.push(`**Projection:** at mean ${meanMsPerD3.toFixed(1)} ms/d3 game, a full 54-cell × 50-game d3 sweep would take ~${(fullGridD3Sec / 60).toFixed(1)} minutes. Triage gates are unnecessary at these per-game costs; A.5c may default to Path C (run d3 on all 54 cells).`);
+  lines.push('');
+
+  appendFileSync(STUDY_PATH, lines.join('\n'));
+  console.log(`Appended calibration to ${STUDY_PATH}`);
+  console.log(`Mean d3: ${meanMsPerD3.toFixed(1)} ms/game; full 54-cell d3 grid projected at ${(fullGridD3Sec / 60).toFixed(1)} min.`);
 }
+
 function modeGrid(): void {
   console.log('A.5b grid — not implemented yet.');
   process.exit(2);

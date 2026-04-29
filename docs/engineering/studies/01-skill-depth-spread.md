@@ -92,3 +92,20 @@
 ## A.5 — Grid sweep (PENDING)
 
 Awaiting A.5a calibration → A.5b 54-cell grid → A.5c triage → A.5d selective d3.
+---
+
+## A.5a — Calibration pass
+
+**Generated:** 2026-04-29
+**Cells:** 4 × 30 d3 games × 50-turn cap.
+
+| Cell | ruleK | board | weights | pool | mean ms/d3 game | total wall-clock |
+|---|---:|---|---|---:|---:|---:|
+| `k1_6x5_flat_pool12` | 1 | 6×5 | flat | 12 | 6.7 | 0.20s |
+| `k2_7x6_default_pool8` | 2 | 7×6 | default | 8 | 130.4 | 3.91s |
+| `k3_9x8_steep_pool12` | 3 | 9×8 | steep | 12 | 488.7 | 14.66s |
+| `k2_7x6_default_pool12` | 2 | 7×6 | default | 12 | 123.2 | 3.69s |
+
+**Aggregate:** mean 187.2 ms/d3 game across 120 calibration games (22.5s total).
+
+**Projection:** at mean 187.2 ms/d3 game, a full 54-cell × 50-game d3 sweep would take ~8.4 minutes. Triage gates are unnecessary at these per-game costs; A.5c may default to Path C (run d3 on all 54 cells).
