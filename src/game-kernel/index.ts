@@ -14,7 +14,12 @@ import type {
   GameOverEvent,
 } from './types.js';
 import { applyGravity, setTile, removeTiles, spawnTiles } from './board.js';
-import { getAdjacentCells, validateChainExtension, resolveChain } from './chain.js';
+import {
+  getAdjacentCells,
+  validateChainExtension,
+  resolveChain,
+  validateAndResolveChain,
+} from './chain.js';
 import { EMPTY_EVENTS, EMPTY_TILE, lcgFloat, lcgNext, pickTileValue } from './_internal.js';
 
 // Re-export public types
@@ -259,18 +264,16 @@ export function applyAction(state: GameState, action: Action): GameState {
       }
 
       const { chain } = action;
-      const validation = validateChain(state.board, chain);
-      if (!validation.valid) {
+      // Single-pass validate + resolve. validateChain and resolveChain are
+      // still exported for callers (UI hover state) that only need one half.
+      const validated = validateAndResolveChain(state.board, chain, state.config);
+      if (!validated.valid) {
         return state;
       }
-
-      const { resultValue, sameExtensions, doublingExtensions } = resolveChain(
-        state.board,
-        chain,
-        state.config
-      );
+      const { resultValue, sameExtensions, doublingExtensions } = validated;
 
       const lastCell = chain[chain.length - 1];
+      /* v8 ignore next 1 */
       if (lastCell === undefined) return state;
 
       const newEvents: GameEvent[] = [];

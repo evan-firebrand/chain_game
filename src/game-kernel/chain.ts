@@ -145,3 +145,115 @@ export function resolveChain(
   const resultValue = computeResultValue(lastTile.value, sameExtensions, config);
   return { resultValue, sameExtensions, doublingExtensions };
 }
+
+// ─── Fused validate + resolve for the applyAction hot path ──────────────────
+// applyAction used to call validateChain (full chain walk) and then
+// resolveChain (another full chain walk) in sequence — every cell visited
+// twice. This fused walk does both in one pass.
+//
+// Public validateChain and resolveChain are unchanged; UI uses validateChain
+// directly to drive hover-state UX where the resolve work is wasted.
+
+export type ValidatedResolved =
+  | {
+      readonly valid: true;
+      readonly resultValue: ReturnType<typeof computeResultValue>;
+      readonly sameExtensions: number;
+      readonly doublingExtensions: number;
+    }
+  | { readonly valid: false; readonly reason: string };
+
+export function validateAndResolveChain(
+  board: Board,
+  chain: readonly Cell[],
+  config: Pick<GameConfig, 'ruleK'>,
+): ValidatedResolved {
+  const rows = board.length;
+  const cols = board[0]?.length ?? 0;
+
+  if (chain.length < 2) {
+    return { valid: false, reason: 'Chain must have at least 2 cells' };
+  }
+
+  const seen = new Set<number>();
+  let sameExtensions = 0;
+  let doublingExtensions = 0;
+  let prevTile: Tile | undefined;
+  let firstTile: Tile | undefined;
+  let lastTile: Tile | undefined;
+
+  for (let i = 0; i < chain.length; i++) {
+    const cell = chain[i];
+    /* v8 ignore next 1 */
+    if (cell === undefined) return { valid: false, reason: 'Cell out of bounds' };
+    if (cell.row < 0 || cell.row >= rows || cell.col < 0 || cell.col >= cols) {
+      return { valid: false, reason: 'Cell out of bounds' };
+    }
+    const tile = board[cell.row]?.[cell.col];
+    if (tile === undefined || tile.value === 0) {
+      return { valid: false, reason: 'Cell is empty' };
+    }
+    const key = cell.row * cols + cell.col;
+    if (seen.has(key)) return { valid: false, reason: 'Cell reuse not allowed' };
+    seen.add(key);
+
+    if (i === 0) {
+      firstTile = tile;
+    } else if (i === 1) {
+      const first = chain[0];
+      /* v8 ignore next 1 */
+      if (first === undefined || firstTile === undefined) {
+        return { valid: false, reason: 'Chain too short' };
+      }
+      const adj = getAdjacentCells(first, rows, cols);
+      let isAdj = false;
+      for (let j = 0; j < adj.length; j++) {
+        const a = adj[j];
+        if (a !== undefined && a.row === cell.row && a.col === cell.col) {
+          isAdj = true;
+          break;
+        }
+      }
+      if (!isAdj) return { valid: false, reason: 'First two cells must be adjacent' };
+      if (firstTile.value !== tile.value) {
+        return { valid: false, reason: 'First two cells must have the same value' };
+      }
+    } else {
+      const prev = chain[i - 1];
+      /* v8 ignore next 1 */
+      if (prev === undefined || prevTile === undefined) continue;
+      const adj = getAdjacentCells(prev, rows, cols);
+      let isAdj = false;
+      for (let j = 0; j < adj.length; j++) {
+        const a = adj[j];
+        if (a !== undefined && a.row === cell.row && a.col === cell.col) {
+          isAdj = true;
+          break;
+        }
+      }
+      if (!isAdj) {
+        return { valid: false, reason: `Cell ${i} is not adjacent to previous cell` };
+      }
+      if (tile.value === prevTile.value) {
+        sameExtensions++;
+      } else if (tile.value === prevTile.value * 2) {
+        doublingExtensions++;
+      } else {
+        return {
+          valid: false,
+          reason: `Cell ${i} does not satisfy chain extension rule`,
+        };
+      }
+    }
+
+    prevTile = tile;
+    lastTile = tile;
+  }
+
+  /* v8 ignore next 3 */
+  if (lastTile === undefined) {
+    return { valid: false, reason: 'Chain too short' };
+  }
+  const resultValue = computeResultValue(lastTile.value, sameExtensions, config);
+  return { valid: true, resultValue, sameExtensions, doublingExtensions };
+}
