@@ -1,22 +1,75 @@
 import type { Cell, Tile, Board, GameConfig, Row, Col } from './types.js';
 import { computeResultValue } from './rules.js';
 
+// ─── Neighbor table cache ────────────────────────────────────────────────────
+// getAdjacentCells used to build a fresh up-to-9-element array on every call,
+// allocating up to 9 Cell objects each time. Per-cell neighborhoods are fully
+// determined by (rows, cols), so cache the full table per-geometry. Each
+// returned array is frozen and reused across calls.
+
+type NeighborGrid = readonly (readonly (readonly Cell[])[])[];
+
+const neighborTableCache = new Map<number, NeighborGrid>();
+
+function geometryKey(rows: number, cols: number): number {
+  return rows * 1000 + cols;
+}
+
+function buildNeighborTable(rows: number, cols: number): NeighborGrid {
+  const grid: (readonly Cell[])[][] = [];
+  for (let r = 0; r < rows; r++) {
+    const row: (readonly Cell[])[] = [];
+    for (let c = 0; c < cols; c++) {
+      const neighbors: Cell[] = [];
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const nr = r + dr;
+          const nc = c + dc;
+          if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) {
+            neighbors.push(Object.freeze({ row: nr as Row, col: nc as Col }));
+          }
+        }
+      }
+      Object.freeze(neighbors);
+      row.push(neighbors);
+    }
+    Object.freeze(row);
+    grid.push(row);
+  }
+  Object.freeze(grid);
+  return grid;
+}
+
+function getNeighborTable(rows: number, cols: number): NeighborGrid {
+  const key = geometryKey(rows, cols);
+  let table = neighborTableCache.get(key);
+  if (table === undefined) {
+    table = buildNeighborTable(rows, cols);
+    neighborTableCache.set(key, table);
+  }
+  return table;
+}
+
 /**
  * Returns all cells within 1 step in 8 directions that are in bounds.
+ *
+ * Result is a frozen, cached array — callers must NOT mutate. The return
+ * type is intentionally not `readonly Cell[]` for backward-compatibility
+ * with existing callers that read-only-iterate; the freeze enforces the
+ * contract at runtime.
  */
 export function getAdjacentCells(cell: Cell, rows: number, cols: number): Cell[] {
-  const result: Cell[] = [];
-  for (let dr = -1; dr <= 1; dr++) {
-    for (let dc = -1; dc <= 1; dc++) {
-      if (dr === 0 && dc === 0) continue;
-      const r = cell.row + dr;
-      const c = cell.col + dc;
-      if (r >= 0 && r < rows && c >= 0 && c < cols) {
-        result.push({ row: r as Row, col: c as Col });
-      }
-    }
-  }
-  return result;
+  const table = getNeighborTable(rows, cols);
+  const rowEntry = table[cell.row];
+  /* v8 ignore next 1 */
+  if (rowEntry === undefined) return [];
+  const cellEntry = rowEntry[cell.col];
+  /* v8 ignore next 1 */
+  if (cellEntry === undefined) return [];
+  // Frozen at build time; cast to mutable type to preserve the original
+  // public signature without forcing every caller to switch to readonly.
+  return cellEntry as Cell[];
 }
 
 /**
@@ -91,4 +144,109 @@ export function resolveChain(
 
   const resultValue = computeResultValue(lastTile.value, sameExtensions, config);
   return { resultValue, sameExtensions, doublingExtensions };
+}
+
+// ─── Fused validate + resolve for the applyAction hot path ──────────────────
+// applyAction used to call validateChain (full chain walk) and then
+// resolveChain (another full chain walk) in sequence — every cell visited
+// twice. This fused walk does both in one pass.
+//
+// Public validateChain and resolveChain are unchanged; UI uses validateChain
+// directly to drive hover-state UX where the resolve work is wasted.
+
+export type ValidatedResolved =
+  | {
+      readonly valid: true;
+      readonly resultValue: ReturnType<typeof computeResultValue>;
+      readonly sameExtensions: number;
+      readonly doublingExtensions: number;
+    }
+  | { readonly valid: false; readonly reason: string };
+
+export function validateAndResolveChain(
+  board: Board,
+  chain: readonly Cell[],
+  config: Pick<GameConfig, 'ruleK'>,
+): ValidatedResolved {
+  const rows = board.length;
+  const cols = (board[0] as readonly Tile[]).length;
+
+  if (chain.length < 2) {
+    return { valid: false, reason: 'Chain must have at least 2 cells' };
+  }
+
+  const seen = new Set<number>();
+  let sameExtensions = 0;
+  let doublingExtensions = 0;
+  let prevTile: Tile | undefined;
+  let firstTile: Tile | undefined;
+  let lastTile: Tile | undefined;
+
+  for (let i = 0; i < chain.length; i++) {
+    const cell = chain[i];
+    /* v8 ignore next 1 */
+    if (cell === undefined) return { valid: false, reason: 'Cell out of bounds' };
+    if (cell.row < 0 || cell.row >= rows || cell.col < 0 || cell.col >= cols) {
+      return { valid: false, reason: 'Cell out of bounds' };
+    }
+    const tile = board[cell.row]?.[cell.col];
+    if (tile === undefined || tile.value === 0) {
+      return { valid: false, reason: 'Cell is empty' };
+    }
+    const key = cell.row * cols + cell.col;
+    if (seen.has(key)) return { valid: false, reason: 'Cell reuse not allowed' };
+    seen.add(key);
+
+    if (i === 0) {
+      firstTile = tile;
+    } else if (i === 1) {
+      // chain.length >= 2 guarantees chain[0] exists; firstTile was set
+      // when i === 0 above. Both casts are safe by construction.
+      const first = chain[0] as Cell;
+      const adj = getAdjacentCells(first, rows, cols);
+      let isAdj = false;
+      for (const a of adj) {
+        if (a.row === cell.row && a.col === cell.col) {
+          isAdj = true;
+          break;
+        }
+      }
+      if (!isAdj) return { valid: false, reason: 'First two cells must be adjacent' };
+      if ((firstTile as Tile).value !== tile.value) {
+        return { valid: false, reason: 'First two cells must have the same value' };
+      }
+    } else {
+      const prev = chain[i - 1] as Cell;
+      const prevTileVal = (prevTile as Tile).value;
+      const adj = getAdjacentCells(prev, rows, cols);
+      let isAdj = false;
+      for (const a of adj) {
+        if (a.row === cell.row && a.col === cell.col) {
+          isAdj = true;
+          break;
+        }
+      }
+      if (!isAdj) {
+        return { valid: false, reason: `Cell ${i} is not adjacent to previous cell` };
+      }
+      if (tile.value === prevTileVal) {
+        sameExtensions++;
+      } else if (tile.value === prevTileVal * 2) {
+        doublingExtensions++;
+      } else {
+        return {
+          valid: false,
+          reason: `Cell ${i} does not satisfy chain extension rule`,
+        };
+      }
+    }
+
+    prevTile = tile;
+    lastTile = tile;
+  }
+
+  // chain.length >= 2 (checked above) guarantees lastTile was assigned at
+  // least twice in the loop. Cast directly rather than re-checking.
+  const resultValue = computeResultValue((lastTile as Tile).value, sameExtensions, config);
+  return { valid: true, resultValue, sameExtensions, doublingExtensions };
 }

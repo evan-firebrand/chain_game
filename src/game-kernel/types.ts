@@ -40,6 +40,16 @@ export interface GameConfig {
   readonly spawnWeights: Readonly<Partial<Record<TileValue, number>>>;
   /** Seeded PRNG state. All randomness flows through this. */
   readonly prngSeed: number;
+  /**
+   * If `false`, the kernel skips the cumulative `state.events` log — every
+   * commit-chain still populates `state.lastEvents` with the per-turn delta,
+   * but `state.events` always points to a shared frozen empty array. This
+   * removes the O(T²) spread that dominates long-game and sweep workloads.
+   *
+   * Defaults to `true` (cumulative log, matches v1 contract). Sim-harness
+   * sets this to `false` per the perf plan.
+   */
+  readonly recordEvents?: boolean;
 }
 
 export const DEFAULT_CONFIG: GameConfig = {
@@ -70,6 +80,14 @@ export interface GameState {
   readonly prngState: number;
   /** Accumulated event log for this game (used by sim harness). */
   readonly events: readonly GameEvent[];
+  /**
+   * Events produced by the *most recent* action only. Always populated;
+   * empty array on the result of `createGame`. Consumers that only need
+   * the per-turn delta (e.g. `game-session`) should read this rather
+   * than slicing `events` — that pattern forces `events` to remain
+   * cumulative and causes O(T²) growth in long games.
+   */
+  readonly lastEvents: readonly GameEvent[];
 }
 
 // ─── Actions ───────────────────────────────────────────────────────────────

@@ -16,9 +16,13 @@ export class GameSession {
   }
 
   dispatch(action: Action): void {
-    const prevCount = this.state.events.length;
+    const prev = this.state;
     this.state = applyAction(this.state, action);
-    const newKernelEvents = this.state.events.slice(prevCount) as readonly GameEvent[];
+    // Reference equality means applyAction was a no-op (game-over guard
+    // or invalid chain) and `lastEvents` carries stale data from the
+    // prior transition; emit nothing in that case.
+    const newKernelEvents: readonly GameEvent[] =
+      this.state === prev ? [] : this.state.lastEvents;
     this._emit(newKernelEvents);
   }
 
