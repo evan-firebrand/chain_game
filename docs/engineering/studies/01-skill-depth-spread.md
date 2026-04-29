@@ -530,3 +530,147 @@ Three implications for Phase 4:
 - **Phase 4 should not commit before that exploration.** The CLAUDE.md gate sequence puts Phase 3 (Tuning Console) before Phase 4 (Retirement); this study confirms that's the right order. Tuning Console first, then retirement-mechanism comparison, then Phase 4.
 
 Whatever depth-multiplier ships, it should be studied with the same harness — the methodology in this study is reusable for "does retirement mechanism X deepen Gap C" questions.
+
+---
+
+## Phase 1.5 — Follow-up experiments
+
+**Generated:** 2026-04-29
+
+Triggered by A.6 synthesis: (F.2) test whether the 50-turn cap is masking d3 mastery headroom; (F.3) test whether the board-size slope keeps rising past 9×8; (F.4) add d2 between d1 and d3 on the highest-headroom cells to check whether the gradient is monotonic.
+
+Seeds reset for Phase 1.5: kernel seed base = 4000, strategy seed base = 0. Same paired-seed protocol: game `i` for any strategy/cap uses the same kernel seed.
+
+### F.2 — Cap-extension on top-5 d3−random cells
+
+5 cells × 3 caps {50, 100, 200} × 50 paired games × {random, d1, d3}.
+
+| cell | cap | Δ tier d3−r ± CI | Δ tier d3−d1 ± CI | %cap r→d1→d3 |
+|---|---:|---:|---:|---:|
+| `k1_9x8_steep_pool8` | 50 | 3.18 ± 0.17 | 0.36 ± 0.17 | 100%→100%→100% |
+| `k1_9x8_steep_pool8` | 100 | 3.12 ± 0.14 | 0.30 ± 0.16 | 100%→100%→100% |
+| `k1_9x8_steep_pool8` | 200 | 2.78 ± 0.15 | 0.38 ± 0.17 | 100%→100%→100% |
+| `k1_9x8_steep_pool12` | 50 | 3.18 ± 0.17 | 0.36 ± 0.17 | 100%→100%→100% |
+| `k1_9x8_steep_pool12` | 100 | 3.12 ± 0.14 | 0.30 ± 0.16 | 100%→100%→100% |
+| `k1_9x8_steep_pool12` | 200 | 2.78 ± 0.15 | 0.38 ± 0.17 | 100%→100%→100% |
+| `k1_7x6_steep_pool8` | 50 | 2.72 ± 0.17 | 0.32 ± 0.14 | 100%→100%→100% |
+| `k1_7x6_steep_pool8` | 100 | 2.36 ± 0.18 | 0.18 ± 0.18 | 100%→100%→100% |
+| `k1_7x6_steep_pool8` | 200 | 2.04 ± 0.17 | 0.20 ± 0.15 | 100%→100%→100% |
+| `k1_7x6_steep_pool12` | 50 | 2.72 ± 0.17 | 0.32 ± 0.14 | 100%→100%→100% |
+| `k1_7x6_steep_pool12` | 100 | 2.36 ± 0.18 | 0.18 ± 0.18 | 100%→100%→100% |
+| `k1_7x6_steep_pool12` | 200 | 2.04 ± 0.17 | 0.20 ± 0.15 | 100%→100%→100% |
+| `k1_9x8_default_pool8` | 50 | 2.58 ± 0.29 | 0.30 ± 0.18 | 100%→100%→100% |
+| `k1_9x8_default_pool8` | 100 | 2.36 ± 0.24 | 0.36 ± 0.16 | 100%→100%→100% |
+| `k1_9x8_default_pool8` | 200 | 2.00 ± 0.19 | 0.28 ± 0.14 | 100%→100%→100% |
+
+#### F.2 cap-trend per cell (does mastery headroom grow?)
+
+| cell | Δ d3−r @50 | Δ d3−r @100 | Δ d3−r @200 | Δ d3−d1 @50 | Δ d3−d1 @100 | Δ d3−d1 @200 |
+|---|---:|---:|---:|---:|---:|---:|
+| `k1_9x8_steep_pool8` | 3.18 | 3.12 | 2.78 | 0.36 | 0.30 | 0.38 |
+| `k1_9x8_steep_pool12` | 3.18 | 3.12 | 2.78 | 0.36 | 0.30 | 0.38 |
+| `k1_7x6_steep_pool8` | 2.72 | 2.36 | 2.04 | 0.32 | 0.18 | 0.20 |
+| `k1_7x6_steep_pool12` | 2.72 | 2.36 | 2.04 | 0.32 | 0.18 | 0.20 |
+| `k1_9x8_default_pool8` | 2.58 | 2.36 | 2.00 | 0.30 | 0.36 | 0.28 |
+
+#### F.2 headline
+
+- Mean Δ tier (d3 − random) across these 5 cells: cap=50: **2.88**, cap=100: **2.66**, cap=200: **2.33**.
+- Mean Δ tier (d3 − d1, mastery headroom) across these 5 cells: cap=50: **0.33**, cap=100: **0.26**, cap=200: **0.29**.
+- F.2 total wall-clock: 373.4s.
+
+### F.3 — Larger-board sweep at k=1, steep, pool=8 (cap=50)
+
+3 cells × 50 paired games × {random, d1, d3}, 50-turn cap.
+
+| cell | board | board cells | Δ tier d3−r | Δ tier d3−d1 | %cap r→d1→d3 |
+|---|---|---:|---:|---:|---:|
+| `k1_9x8_steep_pool8` | 9×8 | 72 | 3.18 ± 0.17 | 0.36 ± 0.17 | 100%→100%→100% |
+| `k1_10x8_steep_pool8` | 10×8 | 80 | 3.18 ± 0.14 | 0.38 ± 0.17 | 100%→100%→100% |
+| `k1_12x10_steep_pool8` | 12×10 | 120 | 3.52 ± 0.20 | 0.30 ± 0.20 | 100%→100%→100% |
+
+F.3 total wall-clock: 70.1s.
+
+### F.4 — d2 ladder on top-5 mastery-headroom cells (cap=50)
+
+5 cells × 50 paired games × {random, d1, d2, d3}, 50-turn cap.
+
+| cell | tier r | tier d1 | tier d2 | tier d3 | Δ d2−d1 ± CI | Δ d3−d2 ± CI | Δ d3−d1 ± CI |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `k1_6x5_flat_pool12` | 13.04 | 13.28 | 13.52 | 13.70 | 0.24 ± 0.23 | 0.18 ± 0.17 | 0.42 ± 0.22 |
+| `k1_7x6_flat_pool8` | 10.04 | 10.94 | 11.20 | 11.32 | 0.26 ± 0.13 | 0.12 ± 0.16 | 0.38 ± 0.18 |
+| `k1_9x8_default_pool8` | 5.66 | 7.94 | 8.06 | 8.24 | 0.12 ± 0.21 | 0.18 ± 0.16 | 0.30 ± 0.18 |
+| `k1_6x5_flat_pool8` | 10.14 | 10.88 | 11.08 | 11.32 | 0.20 ± 0.22 | 0.24 ± 0.23 | 0.44 ± 0.23 |
+| `k1_6x5_steep_pool8` | 5.02 | 7.22 | 7.26 | 7.64 | 0.04 ± 0.17 | 0.38 ± 0.18 | 0.42 ± 0.22 |
+
+F.4 total wall-clock: 20.8s.
+
+### F.5 — Phase 1.5 synthesis
+
+**Phase 1.5 grand total wall-clock:** 7.7 min (well under the 110-min budget projected in A.6).
+
+#### Headline answers to the three triggering questions
+
+**1. Was the 1.80-tier d3−random headline an underestimate (cap masking)?**
+
+**No — it was a slight overestimate.** Extending the cap reveals random catching up to d3 in tier-space, not d3 pulling further ahead. Mean Δ tier (d3 − random) across the 5 top cells:
+
+| cap | mean Δ d3−r | trend |
+|---:|---:|---|
+| 50 | 2.88 | reference |
+| 100 | 2.66 | −0.22 (random closes 8%) |
+| 200 | 2.33 | −0.55 (random closes 19%) |
+
+Mastery headroom (d3 − d1) does **not** grow with cap either — it stays at ~0.30 tier across all three caps. The skill curve is short and *compresses* with longer horizons. Random play, given enough turns, eventually trips into high tiles by chance; d3's careful early game is not enough lead to sustain.
+
+This finding strengthens A.6's "shallow core" interpretation: bare-kernel depth is even shorter at long horizons than the 50-turn measurement suggested.
+
+**2. Does the board-size slope keep rising past 9×8?**
+
+**Modestly, yes.** From 9×8 (72 cells) → 12×10 (120 cells), Δ d3−r grows from 3.18 to 3.52 (+0.34 tier). The intermediate 10×8 is identical to 9×8. So the axis is extendable but the slope is shallow — 60% more board area buys 10% more spread. Mastery headroom (d3−d1) shows no clear trend across these three sizes (0.30–0.38).
+
+The *largest* spread cell in the entire study is now `k1_12x10_steep_pool8` at 3.52 tier, but the design implication is unchanged: even the most-favorable scoped configuration produces ~3.5 tier total skill spread, below what a typical merge-game design target would aim for.
+
+**3. Is the d1→d3 gradient monotonic, or does d3 unlock something d2 doesn't?**
+
+**Mostly monotonic, with one suggestive exception.** d2 sits cleanly between d1 and d3 in 4 of 5 top-headroom cells. The exception: `k1_6x5_steep_pool8` where Δ d2−d1 = 0.04 (d2 indistinguishable from d1) but Δ d3−d2 = 0.38 (d3 jumps materially). That's a "knee" — depth-2 lookahead doesn't help on this configuration; depth-3 finds something depth-2 misses.
+
+The knee is intriguing but small — total d3−d1 in that cell is only 0.42 tier. It does suggest that *some* configurations may have additional depth at d4+ that we'd only see by extending the depth ladder beyond 3.
+
+#### Three new findings worth flagging
+
+**A. Pool-axis is dead in the high-spread regime.** F.2 shows pool=8 and pool=12 producing byte-identical numbers across all three caps (k1_9x8_steep_*) — same kernel seeds, neither d3 nor random ever reaches a tile above 256 in 200 turns, so the higher pool ceiling is never used. The pool=12 axis was already low-leverage (A.6 Marginal: -0.22); F.2 confirms it doesn't activate at all in the cells where skill spread is highest.
+
+**B. The ranking of "interesting" cells is partially cap-dependent.** At cap=50, `k1_9x8_steep_pool8` and `k1_7x6_steep_pool8` are both top cells. At cap=200, the 9×8 cells stay at 2.78 while the 7×6 cells drop to 2.04. Larger boards preserve d3 advantage further into the game; smaller boards see random catch up faster. If skill-curve length is a design priority, larger boards are slightly more durable.
+
+**C. Saturation cells (flat-weight + small-board + pool=12) end naturally before turn 50.** F.4 timing reveals `k1_6x5_flat_pool12` ran 200 games in 0.25s — meaning the average game ends in ~1.25ms (likely ~5-15 turns before no-legal-chain). These cells were the lowest-spread in A.5d for the same reason: games end so fast that strategy can't differentiate. Same root cause; different visible symptom.
+
+#### Revised headline (replaces A.6's headline)
+
+| Strategy gap | Mean Δ tier @ cap=50 (54 cells) | Mean Δ tier @ cap=200 (5 top cells) | Direction |
+|---|---:|---:|---|
+| d3 − random (Gap B) | 1.80 | 2.33 | Top cells average ~30% above the global mean, but still compress with horizon. |
+| d3 − d1 (Gap C) | 0.35 | 0.29 | Mastery headroom is roughly horizon-independent at ~0.30 tier. |
+
+**The bare kernel has a real-but-short skill curve. It does not grow with longer horizons.** Skilled play (d3) reaches ~tier 8 (max tile 256) where typical play (d1) reaches ~tier 7.5 (max tile ~180); both ceilings are reachable within 50 turns. Beyond that, additional turns mostly let random play creep upward, narrowing the spread.
+
+#### Implications for retirement (Phase 4 design)
+
+A.6 framed retirement as a depth-multiplier "load-bearing if the design wants a long skill curve." Phase 1.5 reinforces that:
+
+1. **The 50-turn cap is not artificially limiting the spread.** Extending it makes spread *worse*, not better. So we cannot reach Phase 4 by simply lifting the game cap or playing longer games — we have to add a mechanic that injects new strategic complexity over time.
+2. **The board-size axis offers limited rescue.** Even tripling the board area buys only +0.34 tier of spread. Larger boards alone won't deliver a long skill curve.
+3. **A retirement-style mechanism is more credible as a depth-multiplier than ever.** Bricking (per current spec) escalates the spawn pool over time, which is exactly the kind of new strategic content this study shows the bare kernel lacks. But — see point 4 of A.6 — the bricking-vs-alternatives design question still needs its own exploration before Phase 4.
+
+#### Open questions Phase 1.5 did NOT answer
+
+- **What happens at d4, d5, d12?** The "knee" in `k1_6x5_steep_pool8` (d3 jumps but d2 doesn't) suggests depth-3 may not be the saturation point on every cell. Capping the depth ladder at 3 was justified by Evan's playtest read but doesn't tell us whether *theoretical* skill ceiling is higher.
+- **Why does d3−r shrink with cap?** The mechanism — random catching up to d3 in long games — is plausible but unverified. Could be that d3's spawn-randomness exposure compounds over more turns, eroding its decision-quality advantage. A targeted experiment (e.g. deterministic spawns) would isolate it.
+- **Does retirement actually deepen this?** Phase 1.5 does not test retirement-style mechanics at all. The "retirement is load-bearing" claim is still a hypothesis that depends on Phase 4 design and its own study.
+
+#### Phase 2 / 3 / 4 implications (recap, not a recommendation)
+
+- **Phase 3 (Tuning Console) — proceed.** All Tier 1 parameters now have measured spread effects. Console controls are well-motivated.
+- **Phase 4 (Retirement) — pre-design study still needed.** Don't commit to bricking-as-mechanism on the strength of this study alone. Run a retirement-mechanism comparison study before opening Phase 4.
+- **Strategy ladder — extend if budget allows.** A small d4 / d5 ladder on `k1_6x5_steep_pool8` would resolve the knee and tell us whether d3 is the real ceiling or just the current measurement ceiling.
+
