@@ -53,7 +53,7 @@ describe('randomStrategy — determinism', () => {
   });
 
   it('multi-turn play is deterministic for (kernelSeed, strategySeed)', () => {
-    const playN = (kSeed: number, sSeed: number, turns: number) => {
+    const playN = (kSeed: number, sSeed: number, turns: number): number[] => {
       const fast = fromPure(createGame({ ...CONFIG, prngSeed: kSeed }));
       const rng = makeStrategyRng(sSeed);
       for (let t = 0; t < turns; t++) {

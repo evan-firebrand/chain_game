@@ -36,18 +36,15 @@ export function resolveChainInPlace(
   // Initialise prevValue from chain[0] outside the loop so we don't need to
   // special-case i === 0 inside the hot path.
   const first = chain[0];
-  /* v8 ignore next 1 */
   if (first === undefined) {
     return { resultValue: 0 as TileValue, sameExtensions: 0, doublingExtensions: 0 };
   }
-  let prevValue = unpackValue(board[first.row * cols + first.col] ?? 0);
+  let prevValue = unpackValue(board[first.row * cols + first.col] as number);
   let lastValue = prevValue;
 
   for (let i = 1; i < chain.length; i++) {
-    const cell = chain[i];
-    /* v8 ignore next 1 */
-    if (cell === undefined) continue;
-    const v = unpackValue(board[cell.row * cols + cell.col] ?? 0);
+    const cell = chain[i] as Cell;
+    const v = unpackValue(board[cell.row * cols + cell.col] as number);
     if (i >= 2) {
       if (v === prevValue) sameExtensions++;
       else if (v === prevValue * 2) doublingExtensions++;

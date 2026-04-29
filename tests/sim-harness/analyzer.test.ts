@@ -112,7 +112,7 @@ describe('analyze — aggregation', () => {
     ];
     const agg = analyze(results, { config: CONFIG, strategy: 'random', n: 3, startStrategySeed: 0 });
     expect(agg.outputs.deathCauseDistribution['no-legal-chain-start']).toBe(2);
-    expect(agg.outputs.deathCauseDistribution['none']).toBe(1);
+    expect(agg.outputs.deathCauseDistribution.none).toBe(1);
   });
 });
 

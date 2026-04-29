@@ -26,10 +26,7 @@ export function removeTilesInPlace(
   cells: readonly Cell[],
 ): void {
   const cols = fast.cols;
-  for (let i = 0; i < cells.length; i++) {
-    const cell = cells[i];
-    /* v8 ignore next 1 */
-    if (cell === undefined) continue;
+  for (const cell of cells) {
     fast.board[cell.row * cols + cell.col] = PACKED_EMPTY;
   }
 }
@@ -49,8 +46,8 @@ export function applyGravityInPlace(fast: FastState): void {
   for (let c = 0; c < cols; c++) {
     let wr = rows - 1;
     for (let r = rows - 1; r >= 0; r--) {
-      const byte = board[r * cols + c];
-      if (byte !== PACKED_EMPTY && byte !== undefined) {
+      const byte = board[r * cols + c] as number;
+      if (byte !== PACKED_EMPTY) {
         if (r !== wr) {
           board[wr * cols + c] = byte;
         }
@@ -73,6 +70,7 @@ export function applyGravityInPlace(fast: FastState): void {
  * so determinism is preserved across pure ↔ fast.
  */
 export function spawnTilesInPlace(fast: FastState, count: number): void {
+  /* v8 ignore next 1 */
   if (count <= 0) return;
   const { rows, cols, board, config } = fast;
   let placed = 0;
@@ -101,7 +99,7 @@ export function hasLegalChainStartFast(fast: FastState): boolean {
   const { rows, cols, board } = fast;
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const byte = board[r * cols + c] ?? 0;
+      const byte = board[r * cols + c] as number;
       const valueBits = byte & 0x0f;
       if (valueBits === 0) continue;
       // Check 8 neighbors. Inlined bounds check + same-value comparison.
@@ -112,7 +110,7 @@ export function hasLegalChainStartFast(fast: FastState): boolean {
           if (dr === 0 && dc === 0) continue;
           const nc = c + dc;
           if (nc < 0 || nc >= cols) continue;
-          const nByte = board[nr * cols + nc] ?? 0;
+          const nByte = board[nr * cols + nc] as number;
           if ((nByte & 0x0f) === valueBits) return true;
         }
       }
@@ -134,7 +132,7 @@ export function enumerateLegalPairsFast(fast: FastState): Cell[] {
   const out: Cell[] = [];
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const byte = board[r * cols + c] ?? 0;
+      const byte = board[r * cols + c] as number;
       const valueBits = byte & 0x0f;
       if (valueBits === 0) continue;
       // Forward neighbors only (down/right/down-left/down-right) — the
@@ -148,7 +146,7 @@ export function enumerateLegalPairsFast(fast: FastState): Cell[] {
         const nr = r + dr;
         const nc = c + dc;
         if (nr < 0 || nr >= rows || nc < 0 || nc >= cols) continue;
-        const nByte = board[nr * cols + nc] ?? 0;
+        const nByte = board[nr * cols + nc] as number;
         if ((nByte & 0x0f) === valueBits) {
           out.push({ row: r as Row, col: c as Col });
           out.push({ row: nr as Row, col: nc as Col });

@@ -46,9 +46,7 @@ export const greedyStrategy: Strategy = (state) => {
     // Score length-3 extensions: every neighbor of b that isn't a, with
     // a valid extension value (same or double).
     const extensions = extendBy1(state, a, b);
-    for (let k = 0; k < extensions.length; k++) {
-      const c = extensions[k];
-      if (c === undefined) continue;
+    for (const c of extensions) {
       const tri: readonly Cell[] = [a, b, c];
       const triRes = resolveChainInPlace(state, tri, state.config).resultValue;
       if (triRes > bestResult || (triRes === bestResult && 3 > bestLen)) {

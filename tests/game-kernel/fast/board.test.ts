@@ -40,12 +40,6 @@ function emptyTile(): Tile {
   return { value: 0 as TileValue, retired: false };
 }
 
-function makeBoard(values: number[][]): Board {
-  return values.map((rowVals) =>
-    rowVals.map((v) => ({ value: v as TileValue, retired: false })),
-  ) as Board;
-}
-
 describe('setTileInPlace', () => {
   it('writes a packed byte at (row, col)', () => {
     const fast = fromPure(createGame(CONFIG));
@@ -176,7 +170,7 @@ describe('round-trip via toPure', () => {
 
     // Compute the pure expected result manually using the existing pure
     // primitives (imported via game-kernel index).
-    const pureBoardAfter = (() => {
+    const pureBoardAfter = ((): Board => {
       const grid: Tile[][] = pure.board.map((row) =>
         row.map((t) => ({ ...t })),
       );

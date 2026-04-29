@@ -169,7 +169,7 @@ export function validateAndResolveChain(
   config: Pick<GameConfig, 'ruleK'>,
 ): ValidatedResolved {
   const rows = board.length;
-  const cols = board[0]?.length ?? 0;
+  const cols = (board[0] as readonly Tile[]).length;
 
   if (chain.length < 2) {
     return { valid: false, reason: 'Chain must have at least 2 cells' };
@@ -200,33 +200,28 @@ export function validateAndResolveChain(
     if (i === 0) {
       firstTile = tile;
     } else if (i === 1) {
-      const first = chain[0];
-      /* v8 ignore next 1 */
-      if (first === undefined || firstTile === undefined) {
-        return { valid: false, reason: 'Chain too short' };
-      }
+      // chain.length >= 2 guarantees chain[0] exists; firstTile was set
+      // when i === 0 above. Both casts are safe by construction.
+      const first = chain[0] as Cell;
       const adj = getAdjacentCells(first, rows, cols);
       let isAdj = false;
-      for (let j = 0; j < adj.length; j++) {
-        const a = adj[j];
-        if (a !== undefined && a.row === cell.row && a.col === cell.col) {
+      for (const a of adj) {
+        if (a.row === cell.row && a.col === cell.col) {
           isAdj = true;
           break;
         }
       }
       if (!isAdj) return { valid: false, reason: 'First two cells must be adjacent' };
-      if (firstTile.value !== tile.value) {
+      if ((firstTile as Tile).value !== tile.value) {
         return { valid: false, reason: 'First two cells must have the same value' };
       }
     } else {
-      const prev = chain[i - 1];
-      /* v8 ignore next 1 */
-      if (prev === undefined || prevTile === undefined) continue;
+      const prev = chain[i - 1] as Cell;
+      const prevTileVal = (prevTile as Tile).value;
       const adj = getAdjacentCells(prev, rows, cols);
       let isAdj = false;
-      for (let j = 0; j < adj.length; j++) {
-        const a = adj[j];
-        if (a !== undefined && a.row === cell.row && a.col === cell.col) {
+      for (const a of adj) {
+        if (a.row === cell.row && a.col === cell.col) {
           isAdj = true;
           break;
         }
@@ -234,9 +229,9 @@ export function validateAndResolveChain(
       if (!isAdj) {
         return { valid: false, reason: `Cell ${i} is not adjacent to previous cell` };
       }
-      if (tile.value === prevTile.value) {
+      if (tile.value === prevTileVal) {
         sameExtensions++;
-      } else if (tile.value === prevTile.value * 2) {
+      } else if (tile.value === prevTileVal * 2) {
         doublingExtensions++;
       } else {
         return {
@@ -250,10 +245,8 @@ export function validateAndResolveChain(
     lastTile = tile;
   }
 
-  /* v8 ignore next 3 */
-  if (lastTile === undefined) {
-    return { valid: false, reason: 'Chain too short' };
-  }
-  const resultValue = computeResultValue(lastTile.value, sameExtensions, config);
+  // chain.length >= 2 (checked above) guarantees lastTile was assigned at
+  // least twice in the loop. Cast directly rather than re-checking.
+  const resultValue = computeResultValue((lastTile as Tile).value, sameExtensions, config);
   return { valid: true, resultValue, sameExtensions, doublingExtensions };
 }

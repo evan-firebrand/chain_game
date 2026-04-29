@@ -1,13 +1,14 @@
 import type {
   Board,
   GameConfig,
+  GameEvent,
   GamePhase,
   GameState,
   Tile,
   TileValue,
 } from '../types.js';
 import { EMPTY_EVENTS } from '../_internal.js';
-import { PACKED_EMPTY, packTileObj, unpackTile } from './encoding.js';
+import { packTileObj, unpackTile } from './encoding.js';
 
 // ─── FastState ───────────────────────────────────────────────────────────────
 //
@@ -78,16 +79,16 @@ export function fromPure(state: GameState): FastState {
 export function toPure(
   fast: FastState,
   options: {
-    events?: readonly import('../types.js').GameEvent[];
-    lastEvents?: readonly import('../types.js').GameEvent[];
+    events?: readonly GameEvent[];
+    lastEvents?: readonly GameEvent[];
   } = {},
 ): GameState {
   const { rows, cols, board } = fast;
-  const grid: Tile[][] = new Array(rows);
+  const grid = new Array<Tile[]>(rows);
   for (let r = 0; r < rows; r++) {
-    const row: Tile[] = new Array(cols);
+    const row = new Array<Tile>(cols);
     for (let c = 0; c < cols; c++) {
-      const byte = board[r * cols + c] ?? PACKED_EMPTY;
+      const byte = board[r * cols + c] as number;
       row[c] = Object.freeze(unpackTile(byte));
     }
     Object.freeze(row);
@@ -113,7 +114,7 @@ export function toPure(
 
 /** Read a single cell as a packed byte. */
 export function readCell(fast: FastState, row: number, col: number): number {
-  return fast.board[row * fast.cols + col] ?? PACKED_EMPTY;
+  return fast.board[row * fast.cols + col] as number;
 }
 
 /** Write a single cell as a packed byte. */

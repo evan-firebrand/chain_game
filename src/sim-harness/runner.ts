@@ -52,11 +52,6 @@ export function playOneGame(
 ): GameResult {
   const maxTurns = options.maxTurns ?? DEFAULT_MAX_TURNS;
   const strategy = STRATEGIES[strategyName];
-  /* v8 ignore next 3 — strategyName is a discriminated union; STRATEGIES
-     has every variant. Defensive against runtime corruption only. */
-  if (strategy === undefined) {
-    throw new Error(`playOneGame: unknown strategy '${strategyName}'`);
-  }
 
   // Force recordEvents:false — the harness never reads state.events.
   const simConfig: GameConfig = { ...config, recordEvents: false };
@@ -123,7 +118,7 @@ export function runGames(
   strategyName: StrategyName,
   options: RunGamesOptions,
 ): GameResult[] {
-  const results: GameResult[] = new Array(options.n);
+  const results = new Array<GameResult>(options.n);
   const maxTurnsOpt = options.maxTurns;
   for (let i = 0; i < options.n; i++) {
     const playOptions: PlayOneOptions = maxTurnsOpt !== undefined ? { maxTurns: maxTurnsOpt } : {};

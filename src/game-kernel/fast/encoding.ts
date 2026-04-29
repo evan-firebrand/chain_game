@@ -50,13 +50,11 @@ export function packTileObj(tile: Tile): number {
 /** Read the value bits of a packed cell. */
 export function unpackValue(byte: number): TileValue {
   const log2 = byte & 0x0f;
-  const v = VALUE_BY_LOG2[log2];
-  /* v8 ignore next 3 — log2 is a 4-bit nibble, always in [0, 15],
-     always a valid index into the 16-entry VALUE_BY_LOG2 table. */
-  if (v === undefined) {
-    throw new Error(`unpackValue: invalid log2 nibble ${log2} in byte ${byte}`);
-  }
-  return v as TileValue;
+  // log2 is a 4-bit nibble, always in [0, 15], always a valid index into
+  // the 16-entry VALUE_BY_LOG2 table. Bypass the bounds check entirely;
+  // a corrupt byte that didn't go through packTile would produce a
+  // mistyped TileValue downstream, but at this layer we trust the input.
+  return VALUE_BY_LOG2[log2] as TileValue;
 }
 
 /** Read the retired bit of a packed cell. */

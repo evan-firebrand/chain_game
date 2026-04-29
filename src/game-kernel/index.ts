@@ -53,7 +53,7 @@ export { applyGravity, setTile, removeTiles, spawnTiles } from './board.js';
 
 function createEmptyBoard(rows: number, cols: number): Board {
   return Array.from({ length: rows }, () => {
-    const row: typeof EMPTY_TILE[] = new Array(cols);
+    const row = new Array<typeof EMPTY_TILE>(cols);
     for (let i = 0; i < cols; i++) row[i] = EMPTY_TILE;
     return row;
   }) as Board;

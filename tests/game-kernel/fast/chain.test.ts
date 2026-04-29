@@ -7,7 +7,7 @@ import {
 } from '../../../src/game-kernel/index.js';
 import { resolveChainInPlace } from '../../../src/game-kernel/fast/chain.js';
 import { fromPure } from '../../../src/game-kernel/fast/state.js';
-import { packTile, packTileObj } from '../../../src/game-kernel/fast/encoding.js';
+import { packTile } from '../../../src/game-kernel/fast/encoding.js';
 import { setTileInPlace } from '../../../src/game-kernel/fast/board.js';
 import type {
   Board,

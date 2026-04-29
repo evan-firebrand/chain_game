@@ -71,7 +71,7 @@ describe('greedyStrategy — determinism', () => {
   });
 
   it('multi-turn greedy play is deterministic for fixed kernel seed', () => {
-    const playN = (kSeed: number, turns: number) => {
+    const playN = (kSeed: number, turns: number): number[] => {
       const fast = fromPure(createGame({ ...CONFIG, prngSeed: kSeed }));
       const rng = makeStrategyRng(0);
       for (let t = 0; t < turns; t++) {

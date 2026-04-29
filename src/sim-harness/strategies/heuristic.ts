@@ -65,9 +65,7 @@ export const heuristicStrategy: Strategy = (state) => {
     }
 
     const exts = extendBy1(state, a, b);
-    for (let k = 0; k < exts.length; k++) {
-      const c = exts[k];
-      if (c === undefined) continue;
+    for (const c of exts) {
       const tri: readonly Cell[] = [a, b, c];
       const triScore = scoreChain(state, tri);
       if (triScore > bestScore || (triScore === bestScore && 3 > bestLen)) {

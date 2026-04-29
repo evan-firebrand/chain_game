@@ -16,7 +16,7 @@ export function setTile(board: Board, cell: Cell, tile: Tile): Board {
  * Remove tiles at the given cells, returning a new board with those cells empty.
  */
 export function removeTiles(board: Board, cells: readonly Cell[]): Board {
-  const cols = board[0]?.length ?? 0;
+  const cols = (board[0] as readonly Tile[]).length;
   const cellSet = new Set<number>();
   for (const c of cells) {
     cellSet.add(c.row * cols + c.col);
@@ -43,7 +43,7 @@ export function applyGravity(board: Board): Board {
   // EMPTY_TILE; columns that have non-empty tiles will overwrite the
   // bottom slots in the loop below.
   const newBoard: Tile[][] = Array.from({ length: rows }, () => {
-    const row: Tile[] = new Array(cols);
+    const row = new Array<Tile>(cols);
     for (let i = 0; i < cols; i++) row[i] = EMPTY_TILE;
     return row;
   });
