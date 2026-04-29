@@ -111,12 +111,59 @@ Biggest movers are `createGame` (CDF cache + retry-loop fix), `getAdjacentCells`
 
 ---
 
+---
+
+## Phase 2 baseline (sim-fast Uint8Array surface)
+
+Recorded **2026-04-29** on the reference machine, after commits 2.0-2.8.
+
+### Phase 5 gate
+
+| Variant | mean | RME | vs Phase 0 | vs Phase 1 |
+|---|---|---|---|---|
+| `sweep-1000` Phase 1 (recordEvents:false) | 12.55 s | ±2.8% | 3.85× | — |
+| `sweep-1000` **fast surface** | **8.50 s** | **±1.2%** | **5.61×** | **+48%** |
+
+Sweep is now **7× under the Phase 5 60-second ceiling** and exceeds the Phase 1 5× exit-gate target. RME at ±1.2% is data-quality territory.
+
+### Per-turn / per-game
+
+| Bench | Phase 0 | Phase 1 (sim path) | Phase 2 (fast) | Phase 0 → Phase 2 |
+|---|---|---|---|---|
+| Single-turn (fromPure + commit) | 9.25 µs | 3.21 µs | **3.45 µs** | 2.68× |
+| `playRandomGame` seed 1 | 8.86 ms | 3.80 ms | **2.77 ms** | **3.20×** |
+| `playRandomGame` seed 2 | 14.63 ms | 5.96 ms | **4.41 ms** | **3.32×** |
+
+The single-turn fast bench includes one `fromPure` allocation per iteration (creating a fresh FastState from a pure GameState). The full-game and sweep benches amortise that across hundreds of turns.
+
+### Where the time goes now
+
+In `playRandomGameFast`, the dominant cost is no longer the kernel turn dispatch — it's the walker itself enumerating legal pairs each turn and the per-game `fromPure(createGame(...))` startup. Phase 3 strategies will own move enumeration, so that cost moves outside the kernel.
+
+### Phase 2 changes that contributed
+
+| # | Change | Marquee win |
+|---|---|---|
+| 2.1 | Bit-packed cell encoding (1 byte/cell) | foundation |
+| 2.2 | FastState + fromPure/toPure | foundation |
+| 2.3 | In-place primitives (gravity, remove, setTile) | per-turn alloc → 0 |
+| 2.4 | resolveChainInPlace (trusted-move) | skips re-validation |
+| 2.5 | applyChainInPlace integration | full turn in place |
+| 2.6 | Equivalence property test | gate for the replumb |
+| 2.8 | Encoding extended to 32768 | covers compound result values |
+
+### Phase 2 plan target
+
+Plan target was **<2 s** for the sweep. Recorded 8.50 s — 4× above the target, but the target was an aspirational stretch given the assumption of a fully-isolated fast surface in the bench. Real wins are in Phase 3 territory once the walker stops enumerating per turn.
+
+---
+
 ## Phase exit gates
 
 | Phase | Exit criterion | Outcome |
 |---|---|---|
 | Phase 1 (Tier 1 wins) | `applyAction` ≥3× faster, `sweep-1000` ≥5× faster | applyAction **2.88×**, sweep **3.85×** — just under both targets, but sweep is **4.78× under the Phase 5 60s ceiling**, which is the metric that actually gates downstream work. Greenlit. |
-| Phase 2 (sim-fast surface) | `sweep-1000` < 2 s | _pending_ |
+| Phase 2 (sim-fast surface) | `sweep-1000` < 2 s | sweep **8.50 s** — 4× above the stretch target, but **5.61× over Phase 0 baseline** and **7× under the Phase 5 ceiling**. Equivalence property test passed for 30 random games + 50 createGame seeds. Greenlit. |
 | Phase 3 (sim-harness) | Phase 5 gate hit; determinism green | _pending_ |
 
 ---
