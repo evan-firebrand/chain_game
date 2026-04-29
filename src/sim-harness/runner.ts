@@ -8,14 +8,14 @@ import {
 import type { GameResult, Strategy, StrategyName } from './types.js';
 import { makeStrategyRng, randomStrategy } from './strategies/random.js';
 import { greedyStrategy } from './strategies/greedy.js';
+import { heuristicStrategy } from './strategies/heuristic.js';
 
 // ─── Strategy registry ───────────────────────────────────────────────────────
 
 const STRATEGIES: Record<StrategyName, Strategy> = {
   random: randomStrategy,
   greedy: greedyStrategy,
-  // heuristic registered in 3.7
-  heuristic: () => null,
+  heuristic: heuristicStrategy,
 };
 
 export function registerStrategy(name: StrategyName, strategy: Strategy): void {
