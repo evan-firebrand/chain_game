@@ -142,10 +142,11 @@ export function validateChain(
     }
   }
 
-  // Check no cell reuse
-  const seen = new Set<string>();
+  // Check no cell reuse — pack (row, col) into a single integer key
+  // so the Set is keyed by number rather than allocating a string per cell.
+  const seen = new Set<number>();
   for (const cell of chain) {
-    const key = `${cell.row},${cell.col}`;
+    const key = cell.row * cols + cell.col;
     if (seen.has(key)) {
       return { valid: false, reason: 'Cell reuse not allowed' };
     }

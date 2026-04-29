@@ -16,10 +16,14 @@ export function setTile(board: Board, cell: Cell, tile: Tile): Board {
  * Remove tiles at the given cells, returning a new board with those cells empty.
  */
 export function removeTiles(board: Board, cells: readonly Cell[]): Board {
-  const cellSet = new Set(cells.map(c => `${c.row},${c.col}`));
+  const cols = board[0]?.length ?? 0;
+  const cellSet = new Set<number>();
+  for (const c of cells) {
+    cellSet.add(c.row * cols + c.col);
+  }
   return board.map((rowArr, r) =>
     rowArr.map((tile, c) =>
-      cellSet.has(`${r},${c}`) ? { value: 0 as TileValue, retired: false } : tile
+      cellSet.has(r * cols + c) ? { value: 0 as TileValue, retired: false } : tile
     )
   ) as Board;
 }
