@@ -1,19 +1,5 @@
 import type { Board, Cell, Tile, TileValue, GameConfig, Row, Col } from './types.js';
-
-/**
- * Simple seeded LCG (Linear Congruential Generator).
- * Returns the next state.
- */
-function lcgNext(state: number): number {
-  return (Math.imul(1664525, state) + 1013904223) >>> 0;
-}
-
-/**
- * Convert LCG state to [0, 1) float.
- */
-function lcgFloat(state: number): number {
-  return state / 0x100000000;
-}
+import { lcgFloat, lcgNext, pickTileValue } from './_internal.js';
 
 /**
  * Place a tile at a cell, returning a new board.
@@ -74,46 +60,6 @@ export function applyGravity(board: Board): Board {
   }
 
   return newBoard as Board;
-}
-
-/**
- * Pick a tile value from spawn pool using weighted random selection.
- */
-function pickTileValue(
-  config: Pick<GameConfig, 'spawnPoolMin' | 'spawnPoolMax' | 'spawnWeights'>,
-  rand: number
-): TileValue {
-  // Build list of (value, weight) pairs for values in [spawnPoolMin, spawnPoolMax]
-  const entries: [TileValue, number][] = [];
-  let totalWeight = 0;
-
-  let v = config.spawnPoolMin;
-  while (v <= config.spawnPoolMax) {
-    /* v8 ignore next 1 */
-    const weight = config.spawnWeights[v] ?? 0;
-    if (weight > 0) {
-      entries.push([v, weight]);
-      totalWeight += weight;
-    }
-    v = (v * 2) as TileValue;
-  }
-
-  /* v8 ignore next 3 */
-  if (totalWeight === 0 || entries.length === 0) {
-    return config.spawnPoolMin;
-  }
-
-  let threshold = rand * totalWeight;
-  for (const [val, weight] of entries) {
-    threshold -= weight;
-    if (threshold <= 0) {
-      return val;
-    }
-    /* v8 ignore next 1 */
-  }
-  /* v8 ignore next 2 */
-  const last = entries[entries.length - 1];
-  return last !== undefined ? last[0] : config.spawnPoolMin;
 }
 
 /**

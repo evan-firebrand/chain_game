@@ -15,6 +15,7 @@ import type {
 } from './types.js';
 import { applyGravity, setTile, removeTiles, spawnTiles } from './board.js';
 import { getAdjacentCells, validateChainExtension, resolveChain } from './chain.js';
+import { lcgFloat, lcgNext, pickTileValue } from './_internal.js';
 
 // Re-export public types
 export type {
@@ -42,49 +43,6 @@ export { DEFAULT_CONFIG } from './types.js';
 export { computeResultValue } from './rules.js';
 export { getAdjacentCells, validateChainExtension, resolveChain } from './chain.js';
 export { applyGravity, setTile, removeTiles, spawnTiles } from './board.js';
-
-// ─── LCG PRNG (duplicated here for initial board fill) ───────────────────
-
-function lcgNext(state: number): number {
-  return (Math.imul(1664525, state) + 1013904223) >>> 0;
-}
-
-function lcgFloat(state: number): number {
-  return state / 0x100000000;
-}
-
-function pickTileValue(
-  config: Pick<GameConfig, 'spawnPoolMin' | 'spawnPoolMax' | 'spawnWeights'>,
-  rand: number
-): TileValue {
-  const entries: [TileValue, number][] = [];
-  let totalWeight = 0;
-
-  let v = config.spawnPoolMin;
-  while (v <= config.spawnPoolMax) {
-    const weight = config.spawnWeights[v] ?? 0;
-    if (weight > 0) {
-      entries.push([v, weight]);
-      totalWeight += weight;
-    }
-    v = (v * 2) as TileValue;
-  }
-
-  if (totalWeight === 0 || entries.length === 0) {
-    return config.spawnPoolMin;
-  }
-
-  let threshold = rand * totalWeight;
-  for (const [val, weight] of entries) {
-    threshold -= weight;
-    if (threshold <= 0) {
-      return val;
-    }
-  }
-
-  const last = entries[entries.length - 1];
-  return last !== undefined ? last[0] : config.spawnPoolMin;
-}
 
 // ─── Board initialization ─────────────────────────────────────────────────
 
