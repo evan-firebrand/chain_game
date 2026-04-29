@@ -12,6 +12,9 @@ import type { TileValue } from '../../../src/game-kernel/types.js';
 
 const ALL_VALUES: TileValue[] = [
   0, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192,
+  // Compound values above the public enum (cast through `as TileValue`),
+  // produced by the pure surface's lastValue × 2 × 2^bonus formula.
+  16384 as TileValue, 32768 as TileValue,
 ];
 
 describe('packTile', () => {
@@ -32,9 +35,16 @@ describe('packTile', () => {
     expect(packTile(2, true)).toBe(17);
   });
 
-  it('value 8192 retired packs to MAX_PACKED', () => {
-    expect(packTile(8192, true)).toBe(MAX_PACKED);
-    expect(MAX_PACKED).toBe(29);
+  it('value 32768 retired packs to MAX_PACKED', () => {
+    expect(packTile(32768 as TileValue, true)).toBe(MAX_PACKED);
+    expect(MAX_PACKED).toBe(31);
+  });
+
+  it('compound result values above the public TileValue enum (16384) pack', () => {
+    // The pure surface produces these via `as TileValue` casts; the fast
+    // surface must accept them to remain equivalent.
+    expect(packTile(16384 as TileValue, false)).toBe(14);
+    expect(packTile(32768 as TileValue, false)).toBe(15);
   });
 
   it('packed bytes never set bits 5..7', () => {
@@ -76,11 +86,9 @@ describe('unpackValue / unpackRetired / unpackTile', () => {
     expect(unpackTile(PACKED_EMPTY)).toEqual({ value: 0, retired: false });
   });
 
-  it('throws on bytes whose log2 nibble exceeds 13', () => {
-    // 14 in low nibble is unused — a corrupt byte that should never appear.
-    expect(() => unpackValue(14)).toThrow();
-    expect(() => unpackValue(15)).toThrow();
-    expect(() => unpackTile(15)).toThrow();
+  it('decodes log2 nibble 14 → 16384 and 15 → 32768', () => {
+    expect(unpackValue(14)).toBe(16384);
+    expect(unpackValue(15)).toBe(32768);
   });
 
   it('round-trips through Tile -> byte -> Tile for every valid combination', () => {

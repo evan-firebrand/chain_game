@@ -11,6 +11,12 @@ import {
   validateChain,
   DEFAULT_CONFIG,
 } from '../src/game-kernel/index.js';
+import {
+  applyChainInPlace,
+  enumerateLegalPairsFast,
+  fromPure,
+  type FastState,
+} from '../src/game-kernel/fast/index.js';
 
 // ─── Bench-local PRNG ────────────────────────────────────────────────────────
 // Independent from the kernel's PRNG so move-picker variance doesn't perturb
@@ -139,5 +145,45 @@ export function playRandomGame(
     finalState: state,
     turns,
     reachedGameOver: state.phase === 'game-over',
+  };
+}
+
+// ─── Fast-surface walker ─────────────────────────────────────────────────────
+
+export interface FastPlayResult {
+  finalState: FastState;
+  turns: number;
+  reachedGameOver: boolean;
+}
+
+/**
+ * Plays a game on the fast surface. Uses the same walker RNG as
+ * playRandomGame so comparable bench seeds produce comparable game lengths.
+ */
+export function playRandomGameFast(
+  config: GameConfig,
+  walkerSeed: number,
+  maxTurns = 10_000,
+): FastPlayResult {
+  const rng = makeBenchRng(walkerSeed);
+  const fast = fromPure(createGame(config));
+  let turns = 0;
+
+  while (fast.phase === 'playing' && turns < maxTurns) {
+    const flat = enumerateLegalPairsFast(fast);
+    if (flat.length === 0) break;
+    const numPairs = flat.length / 2;
+    const idx = rng.int(numPairs);
+    const a = flat[idx * 2];
+    const b = flat[idx * 2 + 1];
+    if (a === undefined || b === undefined) break;
+    applyChainInPlace(fast, [a, b]);
+    turns++;
+  }
+
+  return {
+    finalState: fast,
+    turns,
+    reachedGameOver: fast.phase === 'game-over',
   };
 }
