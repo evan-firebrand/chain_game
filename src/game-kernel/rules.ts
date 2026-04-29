@@ -16,7 +16,9 @@ export function computeResultValue(
   sameExtensions: number,
   config: Pick<GameConfig, 'ruleK'>
 ): TileValue {
+  // Max attainable bonus on a 7×6 board with ruleK=2 is floor(40/2)=20,
+  // well within the safe range for `1 << bonus` (signed-int shift, <31).
   const bonus = Math.floor(sameExtensions / config.ruleK);
-  const result = lastValue * 2 * Math.pow(2, bonus);
+  const result = lastValue * 2 * (1 << bonus);
   return result as TileValue;
 }

@@ -1,6 +1,18 @@
-import type { GameConfig, TileValue } from './types.js';
+import type { GameConfig, Tile, TileValue } from './types.js';
 
 // Internal helpers shared by board.ts and index.ts. Not part of the public API.
+
+/**
+ * A shared, frozen empty-tile object. Reused everywhere a cell is cleared
+ * (removeTiles, applyGravity initial fill, createEmptyBoard) so we don't
+ * allocate a fresh `{value: 0, retired: false}` per cell.
+ *
+ * Frozen so accidental mutation throws in strict mode.
+ */
+export const EMPTY_TILE: Tile = Object.freeze({
+  value: 0 as TileValue,
+  retired: false,
+});
 
 /**
  * Simple seeded LCG (Linear Congruential Generator).

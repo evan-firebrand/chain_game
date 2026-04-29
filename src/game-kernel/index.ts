@@ -15,7 +15,7 @@ import type {
 } from './types.js';
 import { applyGravity, setTile, removeTiles, spawnTiles } from './board.js';
 import { getAdjacentCells, validateChainExtension, resolveChain } from './chain.js';
-import { lcgFloat, lcgNext, pickTileValue } from './_internal.js';
+import { EMPTY_TILE, lcgFloat, lcgNext, pickTileValue } from './_internal.js';
 
 // Re-export public types
 export type {
@@ -47,9 +47,11 @@ export { applyGravity, setTile, removeTiles, spawnTiles } from './board.js';
 // ─── Board initialization ─────────────────────────────────────────────────
 
 function createEmptyBoard(rows: number, cols: number): Board {
-  return Array.from({ length: rows }, () =>
-    Array.from({ length: cols }, () => ({ value: 0 as TileValue, retired: false }))
-  ) as Board;
+  return Array.from({ length: rows }, () => {
+    const row: typeof EMPTY_TILE[] = new Array(cols);
+    for (let i = 0; i < cols; i++) row[i] = EMPTY_TILE;
+    return row;
+  }) as Board;
 }
 
 function fillBoard(

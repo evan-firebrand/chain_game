@@ -1,5 +1,5 @@
 import type { Board, Cell, Tile, TileValue, GameConfig, Row, Col } from './types.js';
-import { lcgFloat, lcgNext, pickTileValue } from './_internal.js';
+import { EMPTY_TILE, lcgFloat, lcgNext, pickTileValue } from './_internal.js';
 
 /**
  * Place a tile at a cell, returning a new board.
@@ -23,7 +23,7 @@ export function removeTiles(board: Board, cells: readonly Cell[]): Board {
   }
   return board.map((rowArr, r) =>
     rowArr.map((tile, c) =>
-      cellSet.has(r * cols + c) ? { value: 0 as TileValue, retired: false } : tile
+      cellSet.has(r * cols + c) ? EMPTY_TILE : tile
     )
   ) as Board;
 }
@@ -39,10 +39,14 @@ export function applyGravity(board: Board): Board {
   if (rows === 0) return board;
   const cols = board[0]?.length ?? 0;
 
-  // Build new board as mutable array
-  const newBoard: Tile[][] = Array.from({ length: rows }, () =>
-    Array.from({ length: cols }, () => ({ value: 0 as TileValue, retired: false }))
-  );
+  // Build new board as mutable array. Pre-fill every cell with the shared
+  // EMPTY_TILE; columns that have non-empty tiles will overwrite the
+  // bottom slots in the loop below.
+  const newBoard: Tile[][] = Array.from({ length: rows }, () => {
+    const row: Tile[] = new Array(cols);
+    for (let i = 0; i < cols; i++) row[i] = EMPTY_TILE;
+    return row;
+  });
 
   for (let c = 0; c < cols; c++) {
     // Collect non-empty tiles from top to bottom
