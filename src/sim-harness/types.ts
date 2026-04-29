@@ -5,7 +5,13 @@ import type { GameConfig } from '../game-kernel/index.js';
 // change here requires a matching change to that document, and vice versa.
 
 /** Stable name of an automated playing strategy. */
-export type StrategyName = 'random' | 'greedy' | 'heuristic';
+export type StrategyName =
+  | 'random'
+  | 'greedy'
+  | 'heuristic'
+  | 'search-d1'
+  | 'search-d2'
+  | 'search-d3';
 
 /**
  * GameConfig keys whose value is a single number that one-axis sweeps can
