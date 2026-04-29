@@ -85,24 +85,25 @@ function fillBoard(
 export function createGame(config: GameConfig): GameState {
   let prngState = config.prngSeed;
 
-  // Fill board, retry until at least one valid chain start exists
-  let board: Board;
-  let attempt = 0;
-  for (;;) {
-    const result = fillBoard(config.gridRows, config.gridCols, config, prngState);
-    board = result.board;
-    prngState = result.prngState;
-    attempt++;
+  // Single fill — no retry loop. If the natural fill happens to have a legal
+  // chain start, the board is returned as-is (preserves deterministic
+  // fixtures for the common seeds). Otherwise we deterministically inject
+  // an adjacent same-value pair at (0,0)-(0,1), the same fallback the old
+  // retry loop used after 100 attempts.
+  const filled = fillBoard(config.gridRows, config.gridCols, config, prngState);
+  let board: Board = filled.board;
+  prngState = filled.prngState;
 
-    if (hasLegalChainStart(board)) break;
-
-    // If no legal start after many attempts, force a pair
-    if (attempt >= 100) {
-      const firstTile = board[0]?.[0];
-      if (firstTile !== undefined && firstTile.value !== 0) {
-        board = setTile(board, { row: 0 as Row, col: 1 as Col }, { value: firstTile.value, retired: false });
-      }
-      break;
+  if (!hasLegalChainStart(board)) {
+    const firstTile = board[0]?.[0];
+    /* v8 ignore next 2 — fillBoard always populates (0,0); guard for
+       degenerate configs only. */
+    if (firstTile !== undefined && firstTile.value !== 0) {
+      board = setTile(
+        board,
+        { row: 0 as Row, col: 1 as Col },
+        { value: firstTile.value, retired: false },
+      );
     }
   }
 
