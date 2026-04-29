@@ -376,10 +376,203 @@ function modeCalibration(): void {
   console.log(`Mean d3: ${meanMsPerD3.toFixed(1)} ms/game; full 54-cell d3 grid projected at ${(fullGridD3Sec / 60).toFixed(1)} min.`);
 }
 
-function modeGrid(): void {
-  console.log('A.5b grid — not implemented yet.');
-  process.exit(2);
+// ─── A.5b grid sweep mode ────────────────────────────────────────────────────
+
+const GRID_GAMES = 50;
+const GRID_KERNEL_SEED_BASE = 3000;
+const GRID_STRATEGY_SEED_BASE = 0;
+
+function buildGrid(): StudyCell[] {
+  const out: StudyCell[] = [];
+  const ruleKs = [1, 2, 3] as const;
+  const boards = [
+    [6, 5],
+    [7, 6],
+    [9, 8],
+  ] as const;
+  const shapes: readonly WeightShape[] = ['flat', 'default', 'steep'];
+  const pools = [8, 12] as const;
+  for (const ruleK of ruleKs) {
+    for (const [r, c] of boards) {
+      for (const ws of shapes) {
+        for (const pc of pools) {
+          out.push({
+            id: cellIdOf({ ruleK, gridRows: r, gridCols: c, weightShape: ws, poolCount: pc }),
+            ruleK,
+            gridRows: r,
+            gridCols: c,
+            weightShape: ws,
+            poolCount: pc,
+          });
+        }
+      }
+    }
+  }
+  return out;
 }
+
+interface CellPairedResult {
+  readonly cell: StudyCell;
+  readonly random: readonly GameResult[];
+  readonly d1: readonly GameResult[];
+  readonly wallClockMs: number;
+}
+
+function runCellPaired(cell: StudyCell, n: number): CellPairedResult {
+  const cfg = cellConfig(cell);
+  const t0 = Date.now();
+  const random: GameResult[] = [];
+  const d1: GameResult[] = [];
+  for (let i = 0; i < n; i++) {
+    const cfgI: GameConfig = { ...cfg, prngSeed: GRID_KERNEL_SEED_BASE + i };
+    random.push(playOneGame(cfgI, 'random', GRID_STRATEGY_SEED_BASE + i, { maxTurns: MAX_TURNS }));
+    d1.push(playOneGame(cfgI, 'search-d1', GRID_STRATEGY_SEED_BASE + i, { maxTurns: MAX_TURNS }));
+  }
+  return { cell, random, d1, wallClockMs: Date.now() - t0 };
+}
+
+interface CellSummary {
+  readonly cell: StudyCell;
+  readonly tierGap: PairedDiff;
+  readonly cplGap: PairedDiff;
+  readonly aclGap: PairedDiff;
+  readonly capRandom: number;
+  readonly capD1: number;
+  readonly wallClockMs: number;
+}
+
+function summarize(r: CellPairedResult): CellSummary {
+  const tierR = extract(r.random, (g) => tier(g.outputs.maxTile));
+  const tierD = extract(r.d1, (g) => tier(g.outputs.maxTile));
+  const cplR = extract(r.random, (g) => g.outputs.chainsPerLevel);
+  const cplD = extract(r.d1, (g) => g.outputs.chainsPerLevel);
+  const aclR = extract(r.random, (g) => g.outputs.avgChainLength);
+  const aclD = extract(r.d1, (g) => g.outputs.avgChainLength);
+  const capR = r.random.filter((g) => g.outputs.endedByTurnCap).length / r.random.length;
+  const capD = r.d1.filter((g) => g.outputs.endedByTurnCap).length / r.d1.length;
+  return {
+    cell: r.cell,
+    tierGap: pairedDiff(tierD, tierR),
+    cplGap: pairedDiff(cplD, cplR),
+    aclGap: pairedDiff(aclD, aclR),
+    capRandom: capR,
+    capD1: capD,
+    wallClockMs: r.wallClockMs,
+  };
+}
+
+function modeGrid(): void {
+  const cells = buildGrid();
+  console.log(`A.5b grid: ${cells.length} cells × ${GRID_GAMES} paired games × {random, d1}, ${MAX_TURNS}-turn cap`);
+  const summaries: CellSummary[] = [];
+  let grandMs = 0;
+  for (let i = 0; i < cells.length; i++) {
+    const cell = cells[i]!;
+    const r = runCellPaired(cell, GRID_GAMES);
+    grandMs += r.wallClockMs;
+    summaries.push(summarize(r));
+    if ((i + 1) % 10 === 0 || i === cells.length - 1) {
+      console.log(`  [${i + 1}/${cells.length}] ${cell.id}: ${(r.wallClockMs / 1000).toFixed(2)}s (grand ${(grandMs / 1000).toFixed(0)}s)`);
+    }
+  }
+  appendFileSync(STUDY_PATH, renderGridReport(summaries, grandMs));
+  console.log(`Appended grid report to ${STUDY_PATH}`);
+  console.log(`Total wall-clock: ${(grandMs / 1000).toFixed(1)}s (${cells.length} cells × ${GRID_GAMES} paired games)`);
+}
+
+function renderGridReport(summaries: readonly CellSummary[], grandMs: number): string {
+  const lines: string[] = [];
+  lines.push('\n---\n');
+  lines.push('## A.5b — Random + d1 grid sweep\n');
+  lines.push(`**Generated:** ${new Date().toISOString().slice(0, 10)}`);
+  lines.push(`**Inputs:** ${summaries.length} cells × ${GRID_GAMES} paired games × {random, search-d1}, ${MAX_TURNS}-turn cap, kernel seed ${GRID_KERNEL_SEED_BASE}+i.`);
+  lines.push(`**Wall-clock:** ${(grandMs / 1000).toFixed(1)}s.\n`);
+
+  // Per-cell table
+  lines.push('### Per-cell paired spreads (d1 − random)\n');
+  lines.push('| cell | k | board | weights | pool | Δ tier ± CI | Δ CPL ± CI | Δ ACL ± CI | %cap r→d1 |');
+  lines.push('|---|---:|---|---|---:|---:|---:|---:|---:|');
+  const sorted = [...summaries].sort((a, b) => b.tierGap.mean - a.tierGap.mean);
+  for (const s of sorted) {
+    lines.push(
+      `| \`${s.cell.id}\` | ${s.cell.ruleK} | ${s.cell.gridRows}×${s.cell.gridCols} | ${s.cell.weightShape} | ${s.cell.poolCount} ` +
+        `| ${s.tierGap.mean.toFixed(2)} ± ${s.tierGap.ci95.toFixed(2)} ` +
+        `| ${s.cplGap.mean.toFixed(2)} ± ${s.cplGap.ci95.toFixed(2)} ` +
+        `| ${s.aclGap.mean.toFixed(2)} ± ${s.aclGap.ci95.toFixed(2)} ` +
+        `| ${(s.capRandom * 100).toFixed(0)}%→${(s.capD1 * 100).toFixed(0)}% |`,
+    );
+  }
+  lines.push('');
+
+  // Marginal tables on tier gap
+  lines.push('### Marginal effects on Δ tier (mean across the other 3 axes)\n');
+  const renderMarginal = (
+    axis: string,
+    groups: ReadonlyArray<{ label: string; cells: readonly CellSummary[] }>,
+  ): void => {
+    lines.push(`#### Marginal: ${axis}\n`);
+    lines.push(`| ${axis} | mean Δ tier | mean Δ CPL | mean Δ ACL | n cells |`);
+    lines.push('|---|---:|---:|---:|---:|');
+    for (const g of groups) {
+      const tiers = g.cells.map((c) => c.tierGap.mean);
+      const cpls = g.cells.map((c) => c.cplGap.mean);
+      const acls = g.cells.map((c) => c.aclGap.mean);
+      lines.push(
+        `| ${g.label} | ${mean(tiers).toFixed(2)} | ${mean(cpls).toFixed(2)} | ${mean(acls).toFixed(2)} | ${g.cells.length} |`,
+      );
+    }
+    lines.push('');
+  };
+
+  renderMarginal('ruleK', [
+    { label: '1', cells: summaries.filter((s) => s.cell.ruleK === 1) },
+    { label: '2', cells: summaries.filter((s) => s.cell.ruleK === 2) },
+    { label: '3', cells: summaries.filter((s) => s.cell.ruleK === 3) },
+  ]);
+  renderMarginal('board', [
+    { label: '6×5', cells: summaries.filter((s) => s.cell.gridRows === 6) },
+    { label: '7×6', cells: summaries.filter((s) => s.cell.gridRows === 7) },
+    { label: '9×8', cells: summaries.filter((s) => s.cell.gridRows === 9) },
+  ]);
+  renderMarginal('spawnWeights', [
+    { label: 'flat', cells: summaries.filter((s) => s.cell.weightShape === 'flat') },
+    { label: 'default', cells: summaries.filter((s) => s.cell.weightShape === 'default') },
+    { label: 'steep', cells: summaries.filter((s) => s.cell.weightShape === 'steep') },
+  ]);
+  renderMarginal('poolCount', [
+    { label: '8 (max=256)', cells: summaries.filter((s) => s.cell.poolCount === 8) },
+    { label: '12 (max=4096)', cells: summaries.filter((s) => s.cell.poolCount === 12) },
+  ]);
+
+  // Top/bottom cells by tier gap
+  lines.push('### Top-5 cells by Δ tier (d1 most beats random)\n');
+  lines.push('| rank | cell | Δ tier ± CI |');
+  lines.push('|---:|---|---:|');
+  for (let i = 0; i < Math.min(5, sorted.length); i++) {
+    const s = sorted[i]!;
+    lines.push(`| ${i + 1} | \`${s.cell.id}\` | ${s.tierGap.mean.toFixed(2)} ± ${s.tierGap.ci95.toFixed(2)} |`);
+  }
+  lines.push('');
+  lines.push('### Bottom-5 cells by Δ tier (d1 barely beats random)\n');
+  lines.push('| rank | cell | Δ tier ± CI |');
+  lines.push('|---:|---|---:|');
+  for (let i = 0; i < Math.min(5, sorted.length); i++) {
+    const s = sorted[sorted.length - 1 - i]!;
+    lines.push(`| ${i + 1} | \`${s.cell.id}\` | ${s.tierGap.mean.toFixed(2)} ± ${s.tierGap.ci95.toFixed(2)} |`);
+  }
+  lines.push('');
+
+  // Cap-rate scan
+  const allCap = summaries.every((s) => s.capRandom >= 0.99 && s.capD1 >= 0.99);
+  lines.push('### Cap-rate scan\n');
+  lines.push(`- Cells where 100% of both random and d1 games hit the 50-turn cap: ${summaries.filter((s) => s.capRandom >= 0.99 && s.capD1 >= 0.99).length} of ${summaries.length}`);
+  lines.push(`- Cells where neither strategy hit the cap: ${summaries.filter((s) => s.capRandom < 0.5 && s.capD1 < 0.5).length} of ${summaries.length}`);
+  if (allCap) lines.push('- ⚠️ All 54 cells fully cap-truncated. The 50-turn cap is binding everywhere; Phase 1.5 cap-extension is now essentially required to characterize natural game length.');
+  lines.push('');
+
+  return lines.join('\n');
+}
+
 function modeD3Selective(): void {
   console.log('A.5d d3-selective — not implemented yet.');
   process.exit(2);
