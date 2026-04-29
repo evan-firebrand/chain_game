@@ -40,6 +40,16 @@ export interface GameConfig {
   readonly spawnWeights: Readonly<Partial<Record<TileValue, number>>>;
   /** Seeded PRNG state. All randomness flows through this. */
   readonly prngSeed: number;
+  /**
+   * If `false`, the kernel skips the cumulative `state.events` log — every
+   * commit-chain still populates `state.lastEvents` with the per-turn delta,
+   * but `state.events` always points to a shared frozen empty array. This
+   * removes the O(T²) spread that dominates long-game and sweep workloads.
+   *
+   * Defaults to `true` (cumulative log, matches v1 contract). Sim-harness
+   * sets this to `false` per the perf plan.
+   */
+  readonly recordEvents?: boolean;
 }
 
 export const DEFAULT_CONFIG: GameConfig = {

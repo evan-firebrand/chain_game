@@ -42,8 +42,19 @@ export const BENCH_CONFIG: GameConfig = {
   prngSeed: 42,
 };
 
+/** Same as BENCH_CONFIG but opts out of cumulative event recording. */
+export const BENCH_CONFIG_NO_EVENTS: GameConfig = {
+  ...DEFAULT_CONFIG,
+  prngSeed: 42,
+  recordEvents: false,
+};
+
 export function configWithSeed(seed: number): GameConfig {
   return { ...DEFAULT_CONFIG, prngSeed: seed };
+}
+
+export function configWithSeedNoEvents(seed: number): GameConfig {
+  return { ...DEFAULT_CONFIG, prngSeed: seed, recordEvents: false };
 }
 
 // ─── Move enumeration ────────────────────────────────────────────────────────

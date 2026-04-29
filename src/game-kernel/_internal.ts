@@ -1,4 +1,4 @@
-import type { GameConfig, Tile, TileValue } from './types.js';
+import type { GameConfig, GameEvent, Tile, TileValue } from './types.js';
 
 // Internal helpers shared by board.ts and index.ts. Not part of the public API.
 
@@ -13,6 +13,13 @@ export const EMPTY_TILE: Tile = Object.freeze({
   value: 0 as TileValue,
   retired: false,
 });
+
+/**
+ * Shared frozen empty events array, reused as `state.events` whenever
+ * `config.recordEvents === false`. Avoids per-turn allocation of a new
+ * empty array.
+ */
+export const EMPTY_EVENTS: readonly GameEvent[] = Object.freeze([]);
 
 /**
  * Simple seeded LCG (Linear Congruential Generator).

@@ -15,7 +15,7 @@ import type {
 } from './types.js';
 import { applyGravity, setTile, removeTiles, spawnTiles } from './board.js';
 import { getAdjacentCells, validateChainExtension, resolveChain } from './chain.js';
-import { EMPTY_TILE, lcgFloat, lcgNext, pickTileValue } from './_internal.js';
+import { EMPTY_EVENTS, EMPTY_TILE, lcgFloat, lcgNext, pickTileValue } from './_internal.js';
 
 // Re-export public types
 export type {
@@ -116,8 +116,8 @@ export function createGame(config: GameConfig): GameState {
     spawnPoolMin: config.spawnPoolMin,
     spawnPoolMax: config.spawnPoolMax,
     prngState,
-    events: [],
-    lastEvents: [],
+    events: EMPTY_EVENTS,
+    lastEvents: EMPTY_EVENTS,
   };
 }
 
@@ -335,6 +335,15 @@ export function applyAction(state: GameState, action: Action): GameState {
         newPhase = 'game-over';
       }
 
+      // Quadratic-growth defuse: when recordEvents is opted out, leave
+      // state.events pointing at the shared frozen empty array instead of
+      // spreading the prior cumulative log into a new array each turn.
+      // Per-turn delta is always available via state.lastEvents.
+      const events: readonly GameEvent[] =
+        state.config.recordEvents === false
+          ? EMPTY_EVENTS
+          : [...state.events, ...newEvents];
+
       return {
         board,
         config: state.config,
@@ -344,7 +353,7 @@ export function applyAction(state: GameState, action: Action): GameState {
         spawnPoolMin: newSpawnPoolMin,
         spawnPoolMax: newSpawnPoolMax,
         prngState: newPrng,
-        events: [...state.events, ...newEvents],
+        events,
         lastEvents: newEvents,
       };
     }
