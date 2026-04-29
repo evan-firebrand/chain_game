@@ -14,7 +14,7 @@ import type { FastState } from './state.js';
 // to game-kernel; sim-harness imports from this module rather than the
 // individual files.
 export type { FastState } from './state.js';
-export { fromPure, toPure, readCell, writeCell } from './state.js';
+export { cloneFast, fromPure, toPure, readCell, writeCell } from './state.js';
 export {
   applyGravityInPlace,
   enumerateLegalPairsFast,

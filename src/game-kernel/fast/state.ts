@@ -110,6 +110,24 @@ export function toPure(
   };
 }
 
+// ─── Branching ───────────────────────────────────────────────────────────────
+
+/** Branch a FastState for lookahead: copies the board buffer; shares the config reference. */
+export function cloneFast(fast: FastState): FastState {
+  return {
+    board: fast.board.slice(),
+    rows: fast.rows,
+    cols: fast.cols,
+    config: fast.config,
+    phase: fast.phase,
+    turn: fast.turn,
+    maxTileEver: fast.maxTileEver,
+    spawnPoolMin: fast.spawnPoolMin,
+    spawnPoolMax: fast.spawnPoolMax,
+    prngState: fast.prngState,
+  };
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Read a single cell as a packed byte. */
