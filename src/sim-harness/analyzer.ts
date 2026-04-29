@@ -38,6 +38,9 @@ export function analyze(
   const completedLengths: number[] = [];
   const maxTileDistribution: Record<string, number> = {};
   const deathCauseDistribution: Record<string, number> = {};
+  const chainsPerLevels: number[] = [];
+  const avgChainLengths: number[] = [];
+  let endedByCapCount = 0;
 
   // Sum dense histograms across games — width matches whatever the runner
   // produced (currently 64 / 16 from runner.ts constants).
@@ -75,6 +78,10 @@ export function analyze(
     for (let i = 0; i < r.outputs.chainResultHistogram.length; i++) {
       chainResultDistribution[i] = (chainResultDistribution[i] ?? 0) + (r.outputs.chainResultHistogram[i] ?? 0);
     }
+
+    chainsPerLevels.push(r.outputs.chainsPerLevel);
+    avgChainLengths.push(r.outputs.avgChainLength);
+    if (r.outputs.endedByTurnCap) endedByCapCount++;
   }
 
   return {
@@ -96,6 +103,9 @@ export function analyze(
       chainLengthDistribution,
       chainResultDistribution,
       deathCauseDistribution,
+      meanChainsPerLevel: mean(chainsPerLevels),
+      meanChainLength: mean(avgChainLengths),
+      pctEndedByCap: results.length > 0 ? endedByCapCount / results.length : 0,
     },
   };
 }

@@ -57,6 +57,42 @@ interface GameResult {
      * the fast-surface 4-bit value field; covers up to 2^15 = 32768).
      */
     readonly chainResultHistogram: readonly number[];
+    /**
+     * turns / log2(maxTile). Efficiency proxy: lower = more efficient
+     * (fewer chains spent per tier of progress). Returns 0 when
+     * maxTile <= 1 (no growth — degenerate game).
+     */
+    readonly chainsPerLevel: number;
+    /**
+     * Mean chain length committed across the chains in this game. 0 if
+     * no chains landed.
+     */
+    readonly avgChainLength: number;
+    /**
+     * True if the game stopped because the runner's maxTurns cap was
+     * reached, false if the game ended naturally (no-legal-chain).
+     * Note: a cap-truncated game also has `finalPhase === 'playing'`
+     * and `deathCause === null`; this flag is the canonical signal.
+     */
+    readonly endedByTurnCap: boolean;
+    /**
+     * Per-turn metric trends. Both arrays have length = turns; index t
+     * holds the value as of the completion of turn t+1.
+     *   - maxTile[t]    = state.maxTileEver after turn t+1 committed.
+     *   - chainLength[t]= length of the chain committed at turn t+1.
+     */
+    readonly metricsByTurn: {
+      readonly maxTile: readonly number[];
+      readonly chainLength: readonly number[];
+    };
+    /**
+     * Encoded board snapshot at the moment turn 30 completed
+     * (rows*cols bytes in the same packed format used by the fast
+     * kernel surface). Null if the game ended before turn 30.
+     * Used for diagnostic comparison of late-game boards across
+     * strategies / parameter cells.
+     */
+    readonly boardSnapshotTurn30: readonly number[] | null;
   };
 }
 ```
@@ -64,6 +100,7 @@ interface GameResult {
 **Notes:**
 - No per-event log. Dropping the cumulative event array is the O(T²) → O(T) win baked into Phase 1.8; encoding events here would re-introduce that cost.
 - Histograms (not full sequences) keep result size constant per game regardless of length.
+- `metricsByTurn` and `boardSnapshotTurn30` (added in A.3) are O(turns) and O(rows*cols), both small; they enable trend analysis without the O(T²) cost of a full event log.
 - `config.prngSeed` together with `strategySeed` is the full reproduction key.
 
 ---
@@ -109,6 +146,12 @@ interface AggregateResult {
 
     /** Death-cause counts. Key 'none' = games that hit maxTurns. */
     readonly deathCauseDistribution: Readonly<Record<string, number>>;
+    /** Mean of per-game chainsPerLevel. */
+    readonly meanChainsPerLevel: number;
+    /** Mean of per-game avgChainLength. */
+    readonly meanChainLength: number;
+    /** Fraction of games (in [0,1]) that ended at the turn cap rather than naturally. */
+    readonly pctEndedByCap: number;
   };
 }
 ```
@@ -164,7 +207,13 @@ interface SweepResult {
 ## Strategy names
 
 ```ts
-type StrategyName = 'random' | 'greedy' | 'heuristic';
+type StrategyName =
+  | 'random'
+  | 'greedy'
+  | 'heuristic'
+  | 'search-d1'
+  | 'search-d2'
+  | 'search-d3';
 ```
 
 A strategy's behavior is encoded by its name. Adding a new strategy requires:

@@ -38,6 +38,8 @@ const DEFAULT_MAX_TURNS = 100_000;
 const MAX_CHAIN_LENGTH = 64;
 /** Histogram for log2(result) — covers values up to 2^15. */
 const MAX_LOG2_RESULT = 16;
+/** Turn at which boardSnapshotTurn30 is captured. */
+const SNAPSHOT_TURN = 30;
 
 /**
  * Play one game from createGame to game-over (or maxTurns). Returns the
@@ -64,6 +66,11 @@ export function playOneGame(
 
   const chainLengthHistogram = new Array<number>(MAX_CHAIN_LENGTH).fill(0);
   const chainResultHistogram = new Array<number>(MAX_LOG2_RESULT).fill(0);
+  const maxTileByTurn: number[] = [];
+  const chainLengthByTurn: number[] = [];
+  let chainsCommitted = 0;
+  let totalChainLength = 0;
+  let boardSnapshotTurn30: number[] | null = null;
 
   let turn = 0;
 
@@ -83,8 +90,24 @@ export function playOneGame(
         chainResultHistogram[log2] = (chainResultHistogram[log2] ?? 0) + 1;
       }
     }
+
+    chainsCommitted++;
+    totalChainLength += len;
+    maxTileByTurn.push(fast.maxTileEver);
+    chainLengthByTurn.push(len);
+
+    if (fast.turn === SNAPSHOT_TURN && boardSnapshotTurn30 === null) {
+      boardSnapshotTurn30 = Array.from(fast.board);
+    }
+
     turn++;
   }
+
+  const turns = fast.turn;
+  const maxTile = fast.maxTileEver;
+  const chainsPerLevel = maxTile > 1 ? turns / Math.log2(maxTile) : 0;
+  const avgChainLength = chainsCommitted > 0 ? totalChainLength / chainsCommitted : 0;
+  const endedByTurnCap = turn >= maxTurns && fast.phase === 'playing';
 
   return {
     inputs: {
@@ -93,12 +116,17 @@ export function playOneGame(
       strategySeed,
     },
     outputs: {
-      turns: fast.turn,
-      maxTile: fast.maxTileEver,
+      turns,
+      maxTile,
       finalPhase: fast.phase,
       deathCause: fast.phase === 'game-over' ? 'no-legal-chain-start' : null,
       chainLengthHistogram,
       chainResultHistogram,
+      chainsPerLevel,
+      avgChainLength,
+      endedByTurnCap,
+      metricsByTurn: { maxTile: maxTileByTurn, chainLength: chainLengthByTurn },
+      boardSnapshotTurn30,
     },
   };
 }

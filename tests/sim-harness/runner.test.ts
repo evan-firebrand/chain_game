@@ -48,6 +48,73 @@ describe('playOneGame', () => {
   });
 });
 
+describe('playOneGame — A.3 schema additions', () => {
+  it('chainsPerLevel = turns / log2(maxTile) when maxTile > 1', () => {
+    const r = playOneGame(CONFIG, 'random', 1);
+    if (r.outputs.maxTile > 1) {
+      const expected = r.outputs.turns / Math.log2(r.outputs.maxTile);
+      expect(r.outputs.chainsPerLevel).toBeCloseTo(expected, 9);
+    }
+  });
+
+  it('avgChainLength = mean of committed chain lengths', () => {
+    const r = playOneGame(CONFIG, 'random', 1);
+    let totalLen = 0;
+    let count = 0;
+    for (let i = 0; i < r.outputs.chainLengthHistogram.length; i++) {
+      const c = r.outputs.chainLengthHistogram[i] ?? 0;
+      totalLen += i * c;
+      count += c;
+    }
+    if (count > 0) {
+      expect(r.outputs.avgChainLength).toBeCloseTo(totalLen / count, 9);
+    }
+  });
+
+  it('endedByTurnCap is true iff loop hit the cap and phase still playing', () => {
+    const r = playOneGame(CONFIG, 'random', 1, { maxTurns: 5 });
+    if (r.outputs.turns >= 5 && r.outputs.finalPhase === 'playing') {
+      expect(r.outputs.endedByTurnCap).toBe(true);
+    } else {
+      expect(r.outputs.endedByTurnCap).toBe(false);
+    }
+  });
+
+  it('metricsByTurn arrays have length = turns', () => {
+    const r = playOneGame(CONFIG, 'random', 1);
+    expect(r.outputs.metricsByTurn.maxTile.length).toBe(r.outputs.turns);
+    expect(r.outputs.metricsByTurn.chainLength.length).toBe(r.outputs.turns);
+  });
+
+  it('metricsByTurn.maxTile is monotonically non-decreasing', () => {
+    const r = playOneGame(CONFIG, 'random', 1);
+    const arr = r.outputs.metricsByTurn.maxTile;
+    for (let i = 1; i < arr.length; i++) {
+      expect(arr[i]!).toBeGreaterThanOrEqual(arr[i - 1]!);
+    }
+  });
+
+  it('boardSnapshotTurn30 is null when game ends before turn 30', () => {
+    const r = playOneGame(CONFIG, 'random', 1, { maxTurns: 10 });
+    expect(r.outputs.boardSnapshotTurn30).toBeNull();
+  });
+
+  it('boardSnapshotTurn30 has length rows*cols when game reaches turn 30', () => {
+    // Find a seed where the random strategy reaches turn 30.
+    for (let s = 1; s <= 50; s++) {
+      const r = playOneGame(CONFIG, 'random', s, { maxTurns: 50 });
+      if (r.outputs.turns >= 30) {
+        expect(r.outputs.boardSnapshotTurn30).not.toBeNull();
+        expect(r.outputs.boardSnapshotTurn30!.length).toBe(
+          CONFIG.gridRows * CONFIG.gridCols,
+        );
+        return;
+      }
+    }
+    // If no seed reached turn 30, the test is inconclusive but not a failure.
+  });
+});
+
 describe('playOneGame — determinism', () => {
   it('same (config, strategy, strategySeed) → byte-identical result', () => {
     const a = playOneGame(CONFIG, 'random', 7);

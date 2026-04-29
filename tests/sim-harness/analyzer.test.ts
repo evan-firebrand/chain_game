@@ -14,7 +14,13 @@ function mkResult(overrides: {
   chainLengthHistogram?: number[];
   chainResultHistogram?: number[];
   strategySeed?: number;
+  chainsPerLevel?: number;
+  avgChainLength?: number;
+  endedByTurnCap?: boolean;
 }): GameResult {
+  const turns = overrides.turns;
+  const maxTile = overrides.maxTile;
+  const finalPhase = overrides.finalPhase ?? 'game-over';
   return {
     inputs: {
       config: CONFIG,
@@ -22,15 +28,21 @@ function mkResult(overrides: {
       strategySeed: overrides.strategySeed ?? 0,
     },
     outputs: {
-      turns: overrides.turns,
-      maxTile: overrides.maxTile,
-      finalPhase: overrides.finalPhase ?? 'game-over',
+      turns,
+      maxTile,
+      finalPhase,
       deathCause:
         overrides.deathCause === undefined
           ? 'no-legal-chain-start'
           : overrides.deathCause,
       chainLengthHistogram: overrides.chainLengthHistogram ?? [0, 0, 1],
       chainResultHistogram: overrides.chainResultHistogram ?? [0, 1, 0],
+      chainsPerLevel:
+        overrides.chainsPerLevel ?? (maxTile > 1 ? turns / Math.log2(maxTile) : 0),
+      avgChainLength: overrides.avgChainLength ?? 2,
+      endedByTurnCap: overrides.endedByTurnCap ?? finalPhase === 'playing',
+      metricsByTurn: { maxTile: [], chainLength: [] },
+      boardSnapshotTurn30: null,
     },
   };
 }
@@ -126,6 +138,39 @@ describe('analyze — percentile correctness', () => {
     expect(agg.outputs.medianGameLength).toBe(6);
     expect(agg.outputs.p10GameLength).toBeCloseTo(2, 6);
     expect(agg.outputs.p90GameLength).toBeCloseTo(10, 6);
+  });
+});
+
+describe('analyze — A.3 aggregate additions', () => {
+  it('meanChainsPerLevel is the mean of per-game chainsPerLevel', () => {
+    const results = [
+      mkResult({ turns: 10, maxTile: 4, chainsPerLevel: 5 }),
+      mkResult({ turns: 20, maxTile: 4, chainsPerLevel: 10 }),
+      mkResult({ turns: 30, maxTile: 4, chainsPerLevel: 15 }),
+    ];
+    const agg = analyze(results, { config: CONFIG, strategy: 'random', n: 3, startStrategySeed: 0 });
+    expect(agg.outputs.meanChainsPerLevel).toBeCloseTo(10, 6);
+  });
+
+  it('meanChainLength is the mean of per-game avgChainLength', () => {
+    const results = [
+      mkResult({ turns: 10, maxTile: 4, avgChainLength: 2 }),
+      mkResult({ turns: 10, maxTile: 4, avgChainLength: 2.5 }),
+      mkResult({ turns: 10, maxTile: 4, avgChainLength: 3 }),
+    ];
+    const agg = analyze(results, { config: CONFIG, strategy: 'random', n: 3, startStrategySeed: 0 });
+    expect(agg.outputs.meanChainLength).toBeCloseTo(2.5, 6);
+  });
+
+  it('pctEndedByCap is the fraction of cap-truncated games', () => {
+    const results = [
+      mkResult({ turns: 100, maxTile: 8, finalPhase: 'game-over', endedByTurnCap: false }),
+      mkResult({ turns: 100, maxTile: 8, finalPhase: 'playing', deathCause: null, endedByTurnCap: true }),
+      mkResult({ turns: 100, maxTile: 8, finalPhase: 'playing', deathCause: null, endedByTurnCap: true }),
+      mkResult({ turns: 100, maxTile: 8, finalPhase: 'game-over', endedByTurnCap: false }),
+    ];
+    const agg = analyze(results, { config: CONFIG, strategy: 'random', n: 4, startStrategySeed: 0 });
+    expect(agg.outputs.pctEndedByCap).toBeCloseTo(0.5, 6);
   });
 });
 

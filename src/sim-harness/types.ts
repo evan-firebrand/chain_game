@@ -41,6 +41,19 @@ export interface GameResultOutputs {
   readonly deathCause: 'no-legal-chain-start' | null;
   readonly chainLengthHistogram: readonly number[];
   readonly chainResultHistogram: readonly number[];
+  /** turns / log2(maxTile). Lower = more efficient. 0 if maxTile <= 1. */
+  readonly chainsPerLevel: number;
+  /** Mean chain length committed in this game. 0 if no chains landed. */
+  readonly avgChainLength: number;
+  /** True if the game stopped at the maxTurns cap rather than no-legal-chain. */
+  readonly endedByTurnCap: boolean;
+  /** Per-turn metric trends, length = turns. Index t = value after turn t+1. */
+  readonly metricsByTurn: {
+    readonly maxTile: readonly number[];
+    readonly chainLength: readonly number[];
+  };
+  /** Encoded board (rows*cols bytes) at turn 30 completion, or null if game ended earlier. */
+  readonly boardSnapshotTurn30: readonly number[] | null;
 }
 
 export interface GameResult {
@@ -69,6 +82,12 @@ export interface AggregateResultOutputs {
   readonly chainLengthDistribution: readonly number[];
   readonly chainResultDistribution: readonly number[];
   readonly deathCauseDistribution: Readonly<Record<string, number>>;
+  /** Mean of per-game chainsPerLevel. */
+  readonly meanChainsPerLevel: number;
+  /** Mean of per-game avgChainLength. */
+  readonly meanChainLength: number;
+  /** Fraction of games (in [0,1]) that ended at the turn cap rather than naturally. */
+  readonly pctEndedByCap: number;
 }
 
 export interface AggregateResult {
