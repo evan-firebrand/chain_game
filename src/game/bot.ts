@@ -7,7 +7,7 @@ import { randomSeed } from "./rng";
 import { getMode } from "./modes";
 import { WILDS_CONSTANTS } from "./modes/wilds";
 
-export type BotPolicy = "greedy" | "lookahead1" | "random" | "expectimax2" | "heuristic" | "aggressive" | "longChain";
+export type BotPolicy = "greedy" | "lookahead1" | "random" | "expectimax2" | "heuristic" | "aggressive" | "longChain" | "casual" | "engaged" | "skilled" | "speedrunner";
 
 // How a runBot loop terminated. Distinguishes a real game-over (engine said no
 // valid moves) from running into the move cap, the bot finding no chain, or
@@ -81,14 +81,14 @@ function dfsMax(
   }
 }
 
-function findBestChain(grid: Grid, score: ScoreChain): Coord[] | null {
+function findBestChain(grid: Grid, score: ScoreChain, maxDepth = MAX_DEPTH_DEEP): Coord[] | null {
   const best: { path: Coord[] | null; score: number } = { path: null, score: -1 };
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
       const t = grid[r][c];
       if (!t) continue;
       const used = new Set<number>([keyOf(r, c)]);
-      dfsMax(grid, [{ r, c }], [t.value], [t], used, best, score, MAX_DEPTH_DEEP);
+      dfsMax(grid, [{ r, c }], [t.value], [t], used, best, score, maxDepth);
     }
   }
   return best.path;
@@ -228,6 +228,54 @@ export function pickBestChainPersona(
 
 // Back-compat alias for anything that imported the old name.
 export const pickBestChain = pickBestChainGreedy;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Player archetypes — four skill/behaviour profiles for simulation.
+//
+//   casual      — depth 5 greedy; models a player who doesn't plan ahead.
+//                 Chains naturally stay 2–5 tiles.
+//   engaged     — depth 12 greedy; thinks ahead but misses the absolute best.
+//                 Chains typically 5–12 tiles.
+//   skilled     — depth 20 greedy (same as pickBestChainGreedy); finds the
+//                 best chain on the board.
+//   speedrunner — maximises mergeValue² / pathLength; prefers high-value
+//                 merges on fewer tiles to accumulate score quickly.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function makeArchetypeScorer(
+  archetype: "casual" | "engaged" | "skilled" | "speedrunner",
+  mode: GameMode,
+  state?: GameState
+): ScoreChain {
+  const behavior = getMode(mode);
+  const mult = behavior.chainMultiplier;
+  return (path, values, tiles) => {
+    const mv = mergeValue(values);
+    const m = mult ? mult(tiles, state as GameState) : 1;
+    const len = path.length;
+    if (archetype === "speedrunner") return (mv * mv * m) / len;
+    return mv * m * len; // casual / engaged / skilled share the same scorer; depth caps differentiate them
+  };
+}
+
+const ARCHETYPE_DEPTH: Record<"casual" | "engaged" | "skilled" | "speedrunner", number> = {
+  casual: 5,
+  engaged: 12,
+  skilled: MAX_DEPTH_DEEP,
+  speedrunner: MAX_DEPTH_DEEP,
+};
+
+export function pickArchetypeChain(
+  archetype: "casual" | "engaged" | "skilled" | "speedrunner",
+  grid: Grid,
+  mode: GameMode = "classic",
+  state?: GameState
+): Coord[] | null {
+  const scorer = makeArchetypeScorer(archetype, mode, state);
+  const filteredScorer: ScoreChain = (path, values, tiles) =>
+    isChainCommittable(path, tiles, mode) ? scorer(path, values, tiles) : -1;
+  return findBestChain(grid, filteredScorer, ARCHETYPE_DEPTH[archetype]);
+}
 
 // One-ply lookahead: for each of the top-K immediate chains, simulate the commit
 // and score the best follow-up on the resulting board. Pick the argmax of
@@ -527,6 +575,10 @@ export function runBot(seed: number, algo: SpawnAlgo, opts: RunOpts = {}): BotRe
         : policy === "heuristic" ? pickBestChainHeuristic(state)
         : policy === "aggressive" ? pickBestChainPersona("aggressive", state.grid, mode, state)
         : policy === "longChain" ? pickBestChainPersona("longChain", state.grid, mode, state)
+        : policy === "casual"    ? pickArchetypeChain("casual", state.grid, mode, state)
+        : policy === "engaged"   ? pickArchetypeChain("engaged", state.grid, mode, state)
+        : policy === "skilled"   ? pickArchetypeChain("skilled", state.grid, mode, state)
+        : policy === "speedrunner" ? pickArchetypeChain("speedrunner", state.grid, mode, state)
         : pickBestChainGreedy(state.grid, mode, state);
       botDecisionMs += performance.now() - tDec0;
       if (!path || path.length < 2) { terminationReason = "noChainFound"; break; }

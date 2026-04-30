@@ -84,18 +84,18 @@ All bot metrics collected at MAX_DEPTH=5 are measuring an artificially constrain
 
 ---
 
-## Bot Archetypes (Spec — No Code Yet)
+## Bot Archetypes
 
-Before any metric work, four player archetypes need to be defined. These specs are the prerequisite for every study that compares "player types." Once the MAX_DEPTH fix lands, implement them.
+Four player archetypes implemented as `BotPolicy` values in `bot.ts`. Use via `runBot(seed, algo, { policy: "casual" })`.
 
-| Archetype | Target chain-length distribution | Score incentive |
-|---|---|---|
-| **Casual** | mostly 2–5, occasional 6–8 | Takes the first valid chain seen; does not plan |
-| **Engaged** | 5–12 average, peaks at 10–15 | Greedy with depth 15; prioritises clearing tiles |
-| **Skilled** | 10–18 average, targets doubling chains | Lookahead or heuristic with depth 20 |
-| **Speedrunner** | Optimises chain-score-per-move; variable length | Score-per-move maximiser |
+| Archetype | Depth | Scorer | Observed avg chain |
+|---|---|---|---|
+| `casual` | 5 | `mergeValue × length` | 4.1 |
+| `engaged` | 12 | `mergeValue × length` | 7.1 |
+| `skilled` | 20 | `mergeValue × length` | 9.3 |
+| `speedrunner` | 20 | `mergeValue² / length` | 4.6 |
 
-The current `greedy` policy at MAX_DEPTH=5 doesn't correspond to any of these archetypes — it's an artificial artifact of the depth cap, not a player model.
+`pickArchetypeChain(archetype, grid, mode, state)` dispatches to the right scorer and depth. The depth difference is the primary differentiator for the first three archetypes; speedrunner uses the same depth as skilled but a different objective.
 
 ---
 
