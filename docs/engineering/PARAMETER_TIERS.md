@@ -23,7 +23,7 @@ This document covers layers 1 and 2 only. Layers 3 and 4 require playtest data a
 | `COLS` | 5 | Horizontal board size; controls spawn column choice | ✓ mutable | — |
 | `POOL_SIZE` | 4 | How many distinct tile values can spawn | ⚠ See below | What pool size creates interesting difficulty progression? |
 
-**`POOL_SIZE` algorithm issue (P1):** `spawnPool(peak, floor, size)` generates pool values as `[2^(top-n+1), ..., 2^top]`. When `size` exceeds `top+1`, values below 2 get clamped to 2, so the pool has duplicate `2` entries. At pool=10 with peak=512, three slots map to `2`; combined probability of spawning `2` = 74.6%. Large pool sizes don't add new values — they just make `2` even more dominant. See `probe-spawn-weight-shape.ts`.
+**`POOL_SIZE` note:** `spawnPool` now caps at available distinct values (2 through peak/2) so large `size` requests never produce duplicate entries. With peak=512, the max distinct pool is 8 values. Pool sizes > 8 are functionally identical. The weight collapse (top tier drops from 10% at pool=4 to 2% at pool=8) remains as a follow-on tuning concern. See `probe-spawn-weight-shape.ts`.
 
 ---
 
