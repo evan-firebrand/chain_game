@@ -41,7 +41,7 @@ function parseArgs(argv: string[]): Args {
   const mode = f.str<GameMode>("--mode", "classic", ALL_MODES);
   const algos = f.strList<SpawnAlgo>("--algo", [...ALL_ALGOS], ALL_ALGOS);
   const n = f.num("--n", 20, { min: 1 });
-  const policy = f.str<BotPolicy>("--policy", "greedy", ["greedy", "lookahead1", "random", "expectimax2"] as const);
+  const policy = f.str<BotPolicy>("--policy", "greedy", ["greedy", "lookahead1", "random", "expectimax2", "heuristic", "aggressive", "longChain"] as const);
   const maxMoves = f.num("--max-moves", 300, { min: 1 });
   const out = f.get("--out");
   const allowLong = f.has("--allow-long");

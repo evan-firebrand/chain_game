@@ -1,7 +1,12 @@
 import { useState } from "react";
 import type { GameMode } from "../game/types";
-import { ALL_MODES, MODE_LABELS } from "../game/types";
+import { MODE_LABELS } from "../game/types";
 import { readTrophyWall } from "../game/trophyWall";
+
+// Modes shown in the main-menu picker. Other modes still exist in code (engine,
+// harness, types) so they can be revived without rebuilding — we're just
+// shipping classic-only while we sharpen what 2248 actually is.
+const VISIBLE_MODES: GameMode[] = ["classic"];
 
 const MODE_DESCRIPTIONS: Record<GameMode, string> = {
   classic: "Pure chain-building. Reach the target, level up, repeat.",
@@ -43,7 +48,7 @@ export function ModeSelect({
         <p className="mode-select-subtitle">Chain tiles, reach the target, climb.</p>
 
         <div className="mode-cards">
-          {ALL_MODES.map((m) => (
+          {VISIBLE_MODES.map((m) => (
             <button
               key={m}
               type="button"

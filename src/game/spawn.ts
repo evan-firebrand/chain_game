@@ -9,7 +9,12 @@ export const DEFAULT_WEIGHTS = [0.4, 0.3, 0.2, 0.1];
 // Default antiPair strength. Now a per-game value (state.strength), but kept as a
 // constant default for callers that don't want to thread it through.
 export const DEFAULT_STRENGTH = 2.5;
-export const DEFAULT_SOFTNESS = 0;
+// Was 0 (fully adversarial). Harness algo-audit (2026-04-25, lookahead1, N=20)
+// found softness=0 produces 80% game-over on classic, 100% on wilds — board
+// exhaustion, not natural game-over. Softness ≥ 0.5 is the playability
+// threshold. 0.5 is "playable adversarial": still meaningfully harder than
+// weighted, but not degenerate.
+export const DEFAULT_SOFTNESS = 0.5;
 // Adversarial sampler: how many top-hostility candidates compete in the softmax.
 // K=3 keeps the spawn focused on punishing values without becoming deterministic.
 export const DEFAULT_TOPK = 3;
