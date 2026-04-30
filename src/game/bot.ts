@@ -19,7 +19,14 @@ export type TerminationReason =
   | "noChainFound"  // bot returned null/<2 path
   | "invalidCommit"; // planCommit returned null
 
-const MAX_DEPTH = 5;
+// Depth used by policies that enumerate all candidates for simulation
+// (lookahead1, expectimax2, heuristic, random). Bounded to keep memory
+// manageable: at depth 10 the branching factor is constrained by isValidAppend
+// (each tile can only extend to equal or double, so effective BF ≈ 1-3).
+const MAX_DEPTH = 10;
+// Depth used by policies that only need the single best chain (greedy, persona).
+// dfsMax tracks only the running best so memory is O(depth), not O(all chains).
+const MAX_DEPTH_DEEP = 20;
 const LOOKAHEAD_K = 8;
 const LOOKAHEAD_DISCOUNT = 0.9;
 
@@ -33,6 +40,58 @@ type ScoreChain = (path: Coord[], values: number[], tiles: Tile[]) => number;
 
 function defaultScorer(path: Coord[], values: number[]): number {
   return mergeValue(values) * path.length;
+}
+
+// Memory-efficient DFS: tracks only the running best chain rather than all
+// candidates. O(depth) memory. Use for single-best policies (greedy, persona).
+function dfsMax(
+  grid: Grid,
+  path: Coord[],
+  values: number[],
+  tiles: Tile[],
+  used: Set<number>,
+  best: { path: Coord[] | null; score: number },
+  score: ScoreChain,
+  maxDepth: number
+): void {
+  if (path.length >= 2) {
+    const s = score(path, values, tiles);
+    if (s > best.score) {
+      best.score = s;
+      best.path = path.slice();
+    }
+  }
+  if (path.length >= maxDepth) return;
+  const last = path[path.length - 1];
+  for (const [nr, nc] of neighbors8(last.r, last.c, ROWS, COLS)) {
+    const k = keyOf(nr, nc);
+    if (used.has(k)) continue;
+    const nt = grid[nr][nc];
+    if (!nt) continue;
+    if (!isValidAppend(tiles, nt)) continue;
+    used.add(k);
+    path.push({ r: nr, c: nc });
+    values.push(nt.value);
+    tiles.push(nt);
+    dfsMax(grid, path, values, tiles, used, best, score, maxDepth);
+    used.delete(k);
+    path.pop();
+    values.pop();
+    tiles.pop();
+  }
+}
+
+function findBestChain(grid: Grid, score: ScoreChain): Coord[] | null {
+  const best: { path: Coord[] | null; score: number } = { path: null, score: -1 };
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const t = grid[r][c];
+      if (!t) continue;
+      const used = new Set<number>([keyOf(r, c)]);
+      dfsMax(grid, [{ r, c }], [t.value], [t], used, best, score, MAX_DEPTH_DEEP);
+    }
+  }
+  return best.path;
 }
 
 function dfsAll(
@@ -109,14 +168,11 @@ function isChainCommittable(path: Coord[], tiles: Tile[], mode: GameMode): boole
 }
 
 export function pickBestChainGreedy(grid: Grid, mode: GameMode = "classic", state?: GameState): Coord[] | null {
-  let best: CandidateChain | null = null;
-  const all = enumerateAll(grid, makeModeScorer(mode, state));
-  for (const c of all) {
-    const tiles = c.path.map(({ r, c: col }) => grid[r][col] as Tile);
-    if (!isChainCommittable(c.path, tiles, mode)) continue;
-    if (!best || c.score > best.score) best = c;
-  }
-  return best?.path ?? null;
+  const scorer = makeModeScorer(mode, state);
+  // Wrap scorer to reject uncommittable chains (e.g. beast chains too short in Wilds)
+  const filteredScorer: ScoreChain = (path, values, tiles) =>
+    isChainCommittable(path, tiles, mode) ? scorer(path, values, tiles) : -1;
+  return findBestChain(grid, filteredScorer);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -164,14 +220,10 @@ export function pickBestChainPersona(
   mode: GameMode = "classic",
   state?: GameState
 ): Coord[] | null {
-  let best: CandidateChain | null = null;
-  const all = enumerateAll(grid, makePersonaScorer(shape, mode, state));
-  for (const c of all) {
-    const tiles = c.path.map(({ r, c: col }) => grid[r][col] as Tile);
-    if (!isChainCommittable(c.path, tiles, mode)) continue;
-    if (!best || c.score > best.score) best = c;
-  }
-  return best?.path ?? null;
+  const scorer = makePersonaScorer(shape, mode, state);
+  const filteredScorer: ScoreChain = (path, values, tiles) =>
+    isChainCommittable(path, tiles, mode) ? scorer(path, values, tiles) : -1;
+  return findBestChain(grid, filteredScorer);
 }
 
 // Back-compat alias for anything that imported the old name.
