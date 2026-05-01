@@ -59,6 +59,7 @@ export function applyGravity(board: Board): Board {
     // Collect non-empty tiles from top to bottom
     const nonEmpty: Tile[] = [];
     for (let r = 0; r < rows; r++) {
+      /* v8 ignore next 1 - board[r] is always defined since r < rows */
       const tile = board[r]?.[c];
       if (tile !== undefined && tile.value !== 0) {
         nonEmpty.push(tile);
