@@ -12,6 +12,23 @@ Chain Game is a browser-based 2D number-merging puzzle game with a path-chain me
 
 ---
 
+## Game Loop (canonical mental model)
+
+The game is a **lifecycle**, not a single arc:
+
+```
+Free Play → Friction (retirement fires) → Cleanup (clear retired tiles) → Conquest 🎉
+     ↑                                                                          │
+     └──────────────────── Loop at higher tier ────────────────────────────────┘
+```
+
+- **Conquest** = all retired tiles of a tier cleared before any got stranded. This is the milestone.
+- **Failure** = retired tiles became isolated → permanent dead weight on the board. Tier "lost."
+- Retirement is the **pressure source**, not a milestone. Triggering it is normal; conquering the resulting cleanup is the achievement.
+- Studies of player behavior must allow **adaptive strategies** that switch between Free Play and Cleanup mode. Single-strategy bots cannot represent this loop.
+
+---
+
 ## The Prime Directive
 
 > **All game logic lives in `src/game-kernel/` and nowhere else.**

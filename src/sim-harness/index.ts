@@ -28,9 +28,12 @@ export {
 } from './strategies/long-chain.js';
 export {
   casualStrategy,
+  cleanupPrioritizerStrategy,
   engagedStrategy,
+  retirementAvoiderStrategy,
   skilledStrategy,
   speedrunnerStrategy,
+  sweeperStrategy,
 } from './strategies/archetypes.js';
 export {
   buildConstructiveChain,
@@ -41,7 +44,11 @@ export {
   enumerateCandidateChains,
   findBestDeepChain,
   findLegalChainStarts,
+  isolatedTilesByTier,
+  largestAvailableChain,
   legalExtensionsForChain,
+  maxTileOnBoard,
+  tilesByTier,
   toDecision,
 } from './strategies/common.js';
 export type {

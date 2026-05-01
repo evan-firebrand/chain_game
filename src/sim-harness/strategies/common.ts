@@ -108,6 +108,59 @@ export function countIsolatedRetiredTiles(board: Board): number {
   return count;
 }
 
+export function maxTileOnBoard(board: Board): TileValue {
+  let max: TileValue = 0 as TileValue;
+  for (const row of board) {
+    for (const tile of row) {
+      if (tile.value > max) max = tile.value;
+    }
+  }
+  return max;
+}
+
+export function tilesByTier(board: Board): ReadonlyMap<TileValue, number> {
+  const counts = new Map<TileValue, number>();
+  for (const row of board) {
+    for (const tile of row) {
+      if (tile.value === 0) continue;
+      counts.set(tile.value, (counts.get(tile.value) ?? 0) + 1);
+    }
+  }
+  return counts;
+}
+
+export function isolatedTilesByTier(board: Board): ReadonlyMap<TileValue, number> {
+  const rows = board.length;
+  const cols = board[0]?.length ?? 0;
+  const counts = new Map<TileValue, number>();
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const tile = board[r]?.[c];
+      if (tile === undefined || tile.value === 0) continue;
+
+      const hasSameNeighbor = getAdjacentCells({ row: r as Row, col: c as Col }, rows, cols)
+        .some(neighbor => board[neighbor.row]?.[neighbor.col]?.value === tile.value);
+      if (!hasSameNeighbor) {
+        counts.set(tile.value, (counts.get(tile.value) ?? 0) + 1);
+      }
+    }
+  }
+
+  return counts;
+}
+
+// Returns the longest valid chain length currently constructible on the board,
+// or 0 if no chain is possible. Expensive (DFS over all start cells with full
+// board depth) — call only when needed (e.g. postmortem analysis), not per turn
+// in production sims.
+export function largestAvailableChain(state: GameState): number {
+  const rows = state.board.length;
+  const cols = state.board[0]?.length ?? 0;
+  const best = findBestDeepChain(state, rows * cols, c => c.chain.length);
+  return best?.chain.length ?? 0;
+}
+
 export function enumerateCandidateChains(
   state: GameState,
   maxChainLength: number
