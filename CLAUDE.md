@@ -131,6 +131,15 @@ CI runs a dependency boundary check on every push. Violations are build failures
 
 ---
 
+## Branch Workflow
+
+See `docs/engineering/ARCHITECTURE.md` §Branch Strategy for the full rules. Short version: cut from `develop`, PR back to `develop`, never push directly to `develop` or `main`. Evan promotes `develop → main`.
+
+**Off-limits branches — do not read or use as context:**
+- `archive/v1` — abandoned prototype, different codebase entirely
+
+---
+
 ## What Requires Evan's Approval (do not proceed without it)
 
 1. Any edit to files in top-level `docs/` (the 7 design docs)
