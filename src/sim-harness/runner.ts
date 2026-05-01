@@ -20,7 +20,10 @@ import type {
 import { analyzeGames } from './analyzer.js';
 
 const DEFAULT_MAX_TURNS = 10_000;
-const DEFAULT_MAX_CHAIN_LENGTH = 5;
+// Raised from 5: enumerateCandidateChains at depth 5 silently excluded all chains
+// longer than 5 tiles, making simulation metrics invalid (bots missed the majority
+// of available score on boards where chains up to 24 tiles exist).
+const DEFAULT_MAX_CHAIN_LENGTH = 10;
 
 function lcgNext(state: number): number {
   return (Math.imul(1664525, state) + 1013904223) >>> 0;

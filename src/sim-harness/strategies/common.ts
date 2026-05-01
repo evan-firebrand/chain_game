@@ -2,6 +2,7 @@ import {
   computeChainResult,
   getAdjacentCells,
   validateChain,
+  validateChainExtension,
 } from '../../game-kernel/index.js';
 import type {
   Board,
@@ -10,6 +11,7 @@ import type {
   GameState,
   Row,
   Col,
+  Tile,
   TileValue,
 } from '../../game-kernel/index.js';
 import type {
@@ -236,6 +238,82 @@ export function buildConstructiveChain(
 
 export function toCommitAction(candidate: CandidateChain): CommitChainAction {
   return asAction(candidate.chain);
+}
+
+// Memory-efficient exhaustive DFS that tracks only the running best candidate.
+// O(maxDepth) memory — safe for depths up to 20 where enumerateCandidateChains
+// would store millions of intermediate arrays.
+//
+// scoreCandidate returns a number; higher = preferred. The chain must have ≥ 2
+// cells to be eligible (chain-start rule requires a same-value pair).
+export function findBestDeepChain(
+  state: GameState,
+  maxDepth: number,
+  scoreCandidate: (candidate: CandidateChain) => number
+): CandidateChain | undefined {
+  const { board } = state;
+  const rows = board.length;
+  const cols = board[0]?.length ?? 0;
+  const cappedMax = Math.min(maxDepth, rows * cols);
+
+  let bestCandidate: CandidateChain | undefined;
+  let bestScore = -Infinity;
+
+  const path: Cell[] = [];
+  const used = new Set<string>();
+
+  function dfs(): void {
+    if (path.length >= 2) {
+      const rv = computeChainResult(board, path, state.config);
+      const candidate: CandidateChain = { chain: path.slice() as Cell[], resultValue: rv };
+      const s = scoreCandidate(candidate);
+      if (s > bestScore) {
+        bestScore = s;
+        bestCandidate = candidate;
+      }
+    }
+    if (path.length >= cappedMax) return;
+
+    const last = path[path.length - 1];
+    if (last === undefined) return;
+    const lastTile = board[last.row]?.[last.col] as Tile | undefined;
+    if (!lastTile || lastTile.value === 0) return;
+
+    for (const neighbor of getAdjacentCells(last, rows, cols).sort(compareCell)) {
+      const key = cellKey(neighbor);
+      if (used.has(key)) continue;
+      const neighborTile = board[neighbor.row]?.[neighbor.col] as Tile | undefined;
+      if (!neighborTile || neighborTile.value === 0) continue;
+
+      // Chain start (length === 1): neighbor must have the same value.
+      // Extension (length >= 2): same or double the previous tile.
+      if (path.length === 1) {
+        if (neighborTile.value !== lastTile.value) continue;
+      } else {
+        if (!validateChainExtension(lastTile, neighborTile).valid) continue;
+      }
+
+      path.push(neighbor);
+      used.add(key);
+      dfs();
+      path.pop();
+      used.delete(key);
+    }
+  }
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const tile = board[r]?.[c] as Tile | undefined;
+      if (!tile || tile.value === 0) continue;
+      path.push({ row: r as Row, col: c as Col });
+      used.add(cellKey(path[0]!));
+      dfs();
+      path.pop();
+      used.clear();
+    }
+  }
+
+  return bestCandidate;
 }
 
 export function toDecision(

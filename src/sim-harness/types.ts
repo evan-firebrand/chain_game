@@ -16,7 +16,11 @@ export type StrategyId =
   | 'longGreedyWalk'
   | 'milestonePush'
   | 'preRetirementCleanup'
-  | 'strategicHumanLike';
+  | 'strategicHumanLike'
+  | 'casual'
+  | 'engaged'
+  | 'skilled'
+  | 'speedrunner';
 
 export type RetirementModeLabel = 'cascade';
 
