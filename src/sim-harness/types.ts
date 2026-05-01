@@ -20,7 +20,10 @@ export type StrategyId =
   | 'casual'
   | 'engaged'
   | 'skilled'
-  | 'speedrunner';
+  | 'speedrunner'
+  | 'retirementAvoider'
+  | 'sweeper'
+  | 'cleanupPrioritizer';
 
 export type RetirementModeLabel = 'cascade';
 
