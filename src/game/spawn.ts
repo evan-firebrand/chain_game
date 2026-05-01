@@ -9,7 +9,12 @@ export const DEFAULT_WEIGHTS = [0.4, 0.3, 0.2, 0.1];
 // Default antiPair strength. Now a per-game value (state.strength), but kept as a
 // constant default for callers that don't want to thread it through.
 export const DEFAULT_STRENGTH = 2.5;
-export const DEFAULT_SOFTNESS = 0;
+// Was 0 (fully adversarial). Harness algo-audit (2026-04-25, lookahead1, N=20)
+// found softness=0 produces 80% game-over on classic, 100% on wilds — board
+// exhaustion, not natural game-over. Softness ≥ 0.5 is the playability
+// threshold. 0.5 is "playable adversarial": still meaningfully harder than
+// weighted, but not degenerate.
+export const DEFAULT_SOFTNESS = 0.5;
 // Adversarial sampler: how many top-hostility candidates compete in the softmax.
 // K=3 keeps the spawn focused on punishing values without becoming deterministic.
 export const DEFAULT_TOPK = 3;
@@ -18,27 +23,26 @@ export function spawnPool(peak: number, floor?: number, size: number = POOL_SIZE
   const n = Math.max(1, Math.floor(size));
   if (floor !== undefined) {
     const bottom = Math.max(2, floor);
-    // Cap the pool apex at the same level as the non-floor path so peak governs
-    // the maximum spawnable value — not floor × 2^(size-1). This prevents
-    // runaway million-value tiles from appearing before the player has earned them.
     const max = Math.max(bottom * 2, Math.max(16, peak / 2));
     const top = Math.floor(Math.log2(max));
+    const floorTop = Math.floor(Math.log2(bottom));
+    // Cap at the number of distinct powers-of-2 from bottom to max so large
+    // pool sizes never produce duplicate entries at the floor value.
+    const effectiveN = Math.min(n, top - floorTop + 1);
     const pool: number[] = [];
-    for (let i = n - 1; i >= 0; i--) {
-      const v = 2 ** (top - i);
-      pool.push(Math.max(v, bottom));
+    for (let i = effectiveN - 1; i >= 0; i--) {
+      pool.push(2 ** (top - i));
     }
     return pool;
   }
-  // Default-4 behavior: top = log2(max(16, peak/2)) and pool = [top-3..top].
-  // Generalised: keep the same `top` so apex stays peak-relative, and extend
-  // downward as size grows (pool floors out at 2 if it would drop below).
   const max = Math.max(16, peak / 2);
   const top = Math.log2(max);
+  // Cap at available distinct values (2 through 2^top = peak/2) so requesting
+  // a large pool size never fills extra slots with duplicate 2s.
+  const effectiveN = Math.min(n, top);
   const pool: number[] = [];
-  for (let i = n - 1; i >= 0; i--) {
-    const v = 2 ** (top - i);
-    pool.push(v >= 2 ? v : 2);
+  for (let i = effectiveN - 1; i >= 0; i--) {
+    pool.push(2 ** (top - i));
   }
   return pool;
 }

@@ -7,7 +7,7 @@ import { randomSeed } from "./rng";
 import { getMode } from "./modes";
 import { WILDS_CONSTANTS } from "./modes/wilds";
 
-export type BotPolicy = "greedy" | "lookahead1" | "random" | "expectimax2";
+export type BotPolicy = "greedy" | "lookahead1" | "random" | "expectimax2" | "heuristic" | "aggressive" | "longChain" | "casual" | "engaged" | "skilled" | "speedrunner";
 
 // How a runBot loop terminated. Distinguishes a real game-over (engine said no
 // valid moves) from running into the move cap, the bot finding no chain, or
@@ -19,7 +19,14 @@ export type TerminationReason =
   | "noChainFound"  // bot returned null/<2 path
   | "invalidCommit"; // planCommit returned null
 
-const MAX_DEPTH = 5;
+// Depth used by policies that enumerate all candidates for simulation
+// (lookahead1, expectimax2, heuristic, random). Bounded to keep memory
+// manageable: at depth 10 the branching factor is constrained by isValidAppend
+// (each tile can only extend to equal or double, so effective BF ≈ 1-3).
+const MAX_DEPTH = 10;
+// Depth used by policies that only need the single best chain (greedy, persona).
+// dfsMax tracks only the running best so memory is O(depth), not O(all chains).
+const MAX_DEPTH_DEEP = 20;
 const LOOKAHEAD_K = 8;
 const LOOKAHEAD_DISCOUNT = 0.9;
 
@@ -33,6 +40,58 @@ type ScoreChain = (path: Coord[], values: number[], tiles: Tile[]) => number;
 
 function defaultScorer(path: Coord[], values: number[]): number {
   return mergeValue(values) * path.length;
+}
+
+// Memory-efficient DFS: tracks only the running best chain rather than all
+// candidates. O(depth) memory. Use for single-best policies (greedy, persona).
+function dfsMax(
+  grid: Grid,
+  path: Coord[],
+  values: number[],
+  tiles: Tile[],
+  used: Set<number>,
+  best: { path: Coord[] | null; score: number },
+  score: ScoreChain,
+  maxDepth: number
+): void {
+  if (path.length >= 2) {
+    const s = score(path, values, tiles);
+    if (s > best.score) {
+      best.score = s;
+      best.path = path.slice();
+    }
+  }
+  if (path.length >= maxDepth) return;
+  const last = path[path.length - 1];
+  for (const [nr, nc] of neighbors8(last.r, last.c, ROWS, COLS)) {
+    const k = keyOf(nr, nc);
+    if (used.has(k)) continue;
+    const nt = grid[nr][nc];
+    if (!nt) continue;
+    if (!isValidAppend(tiles, nt)) continue;
+    used.add(k);
+    path.push({ r: nr, c: nc });
+    values.push(nt.value);
+    tiles.push(nt);
+    dfsMax(grid, path, values, tiles, used, best, score, maxDepth);
+    used.delete(k);
+    path.pop();
+    values.pop();
+    tiles.pop();
+  }
+}
+
+function findBestChain(grid: Grid, score: ScoreChain, maxDepth = MAX_DEPTH_DEEP): Coord[] | null {
+  const best: { path: Coord[] | null; score: number } = { path: null, score: -1 };
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const t = grid[r][c];
+      if (!t) continue;
+      const used = new Set<number>([keyOf(r, c)]);
+      dfsMax(grid, [{ r, c }], [t.value], [t], used, best, score, maxDepth);
+    }
+  }
+  return best.path;
 }
 
 function dfsAll(
@@ -109,18 +168,114 @@ function isChainCommittable(path: Coord[], tiles: Tile[], mode: GameMode): boole
 }
 
 export function pickBestChainGreedy(grid: Grid, mode: GameMode = "classic", state?: GameState): Coord[] | null {
-  let best: CandidateChain | null = null;
-  const all = enumerateAll(grid, makeModeScorer(mode, state));
-  for (const c of all) {
-    const tiles = c.path.map(({ r, c: col }) => grid[r][col] as Tile);
-    if (!isChainCommittable(c.path, tiles, mode)) continue;
-    if (!best || c.score > best.score) best = c;
-  }
-  return best?.path ?? null;
+  const scorer = makeModeScorer(mode, state);
+  // Wrap scorer to reject uncommittable chains (e.g. beast chains too short in Wilds)
+  const filteredScorer: ScoreChain = (path, values, tiles) =>
+    isChainCommittable(path, tiles, mode) ? scorer(path, values, tiles) : -1;
+  return findBestChain(grid, filteredScorer);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Style personas: NOT skill-tier additions. They probe whether the game
+// rewards varied playstyles. Each picks the immediate chain with the highest
+// persona-shaped score.
+//
+//   aggressive — prefer big merge values, accept short chains
+//                score = mergeValue² × pathLength^0.5
+//   longChain  — prefer many tiles, accept lower values
+//                score = mergeValue × pathLength²
+//
+// Compare to greedy's mergeValue × pathLength as the neutral midpoint.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function makePersonaScorer(
+  shape: "aggressive" | "longChain",
+  mode: GameMode,
+  state?: GameState
+): ScoreChain {
+  const behavior = getMode(mode);
+  const mult = behavior.chainMultiplier;
+  return (path, values, tiles) => {
+    const mv = mergeValue(values);
+    const m = mult ? mult(tiles, state as GameState) : 1;
+    const len = path.length;
+    const base = shape === "aggressive"
+      ? mv * mv * Math.sqrt(len) * m
+      : mv * len * len * m;
+    if (mode === "wilds" && state) {
+      const beastTiles = tiles.filter((t) => t.beast);
+      if (beastTiles.length > 0 && len >= WILDS_CONSTANTS.MIN_CHAIN_FOR_BEAST) {
+        const minDanger = Math.min(...beastTiles.map((t) => t.dangerCounter ?? 6));
+        const urgencyFactor = Math.max(1, 7 - minDanger);
+        return base + state.peak * 10 * urgencyFactor;
+      }
+    }
+    return base;
+  };
+}
+
+export function pickBestChainPersona(
+  shape: "aggressive" | "longChain",
+  grid: Grid,
+  mode: GameMode = "classic",
+  state?: GameState
+): Coord[] | null {
+  const scorer = makePersonaScorer(shape, mode, state);
+  const filteredScorer: ScoreChain = (path, values, tiles) =>
+    isChainCommittable(path, tiles, mode) ? scorer(path, values, tiles) : -1;
+  return findBestChain(grid, filteredScorer);
 }
 
 // Back-compat alias for anything that imported the old name.
 export const pickBestChain = pickBestChainGreedy;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Player archetypes — four skill/behaviour profiles for simulation.
+//
+//   casual      — depth 5 greedy; models a player who doesn't plan ahead.
+//                 Chains naturally stay 2–5 tiles.
+//   engaged     — depth 12 greedy; thinks ahead but misses the absolute best.
+//                 Chains typically 5–12 tiles.
+//   skilled     — depth 20 greedy (same as pickBestChainGreedy); finds the
+//                 best chain on the board.
+//   speedrunner — maximises mergeValue² / pathLength; prefers high-value
+//                 merges on fewer tiles to accumulate score quickly.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function makeArchetypeScorer(
+  archetype: "casual" | "engaged" | "skilled" | "speedrunner",
+  mode: GameMode,
+  state?: GameState
+): ScoreChain {
+  const behavior = getMode(mode);
+  const mult = behavior.chainMultiplier;
+  return (path, values, tiles) => {
+    const mv = mergeValue(values);
+    const m = mult ? mult(tiles, state as GameState) : 1;
+    const len = path.length;
+    if (archetype === "speedrunner") return (mv * mv * m) / len;
+    return mv * m * len; // casual / engaged / skilled share the same scorer; depth caps differentiate them
+  };
+}
+
+const ARCHETYPE_DEPTH: Record<"casual" | "engaged" | "skilled" | "speedrunner", number> = {
+  casual: 5,
+  engaged: 12,
+  skilled: MAX_DEPTH_DEEP,
+  speedrunner: MAX_DEPTH_DEEP,
+};
+
+export function pickArchetypeChain(
+  archetype: "casual" | "engaged" | "skilled" | "speedrunner",
+  grid: Grid,
+  mode: GameMode = "classic",
+  state?: GameState
+): Coord[] | null {
+  const scorer = makeArchetypeScorer(archetype, mode, state);
+  const filteredScorer: ScoreChain = (path, values, tiles) =>
+    isChainCommittable(path, tiles, mode) ? scorer(path, values, tiles) : -1;
+  return findBestChain(grid, filteredScorer, ARCHETYPE_DEPTH[archetype]);
+}
 
 // One-ply lookahead: for each of the top-K immediate chains, simulate the commit
 // and score the best follow-up on the resulting board. Pick the argmax of
@@ -240,6 +395,98 @@ export function pickBestChainExpectimax2(
   return best?.path ?? null;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Heuristic-greedy: top-K candidates re-ranked by a board-quality eval on the
+// post-commit grid. Cheaper than lookahead1 (no follow-up DFS) but smarter
+// than greedy. Features: free-space, merge-pair count, smoothness (8-neighbour
+// log-value differences). Mid-tier bot — bridges greedy → lookahead1.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const HEURISTIC_K = 32;
+// Two features that actually matter for chain games:
+//   - free-space: more empty cells = more chain-start options next turn
+//   - chain-potential: longest plausible chain still available on the board
+// Smoothness/monotonicity (classic 2048 features) don't transfer — chains are
+// hand-picked, not auto-merged, so tile arrangement matters less than reach.
+const HEURISTIC_W_FREE = 50.0;
+const HEURISTIC_W_LONGEST = 100.0;
+const HEURISTIC_GAMEOVER_PENALTY = -1e9;
+
+// Cheap upper-bound on the longest committable chain reachable from any tile.
+// Reuses enumerateAll's DFS via a custom scorer that returns path length.
+function longestChainOnBoard(grid: Grid, mode: GameMode): number {
+  let longest = 0;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      const t = grid[r][c];
+      if (!t) continue;
+      // Local DFS for length only — bounded by MAX_DEPTH (5) so cost is fine.
+      const used = new Set<number>([keyOf(r, c)]);
+      const stack: Array<{ path: Coord[]; values: number[]; tiles: Tile[] }> = [
+        { path: [{ r, c }], values: [t.value], tiles: [t] },
+      ];
+      while (stack.length) {
+        const cur = stack.pop()!;
+        if (cur.path.length >= 2 && isChainCommittable(cur.path, cur.tiles, mode)) {
+          if (cur.path.length > longest) longest = cur.path.length;
+        }
+        if (cur.path.length >= MAX_DEPTH) continue;
+        const last = cur.path[cur.path.length - 1];
+        for (const [nr, nc] of neighbors8(last.r, last.c, ROWS, COLS)) {
+          const k = keyOf(nr, nc);
+          if (used.has(k)) continue;
+          const nt = grid[nr][nc];
+          if (!nt) continue;
+          if (!isValidAppend(cur.tiles, nt)) continue;
+          used.add(k);
+          stack.push({
+            path: [...cur.path, { r: nr, c: nc }],
+            values: [...cur.values, nt.value],
+            tiles: [...cur.tiles, nt],
+          });
+          // NB: path memberships are local to each frame; don't delete-on-pop.
+          // Slight overhead but keeps the iterative loop simple.
+        }
+      }
+    }
+  }
+  return longest;
+}
+
+export function evaluateBoard(grid: Grid, mode: GameMode = "classic"): number {
+  let freeSpace = 0;
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      if (!grid[r][c]) freeSpace++;
+    }
+  }
+  const longest = longestChainOnBoard(grid, mode);
+  return HEURISTIC_W_FREE * freeSpace + HEURISTIC_W_LONGEST * longest;
+}
+
+export function pickBestChainHeuristic(state: GameState): Coord[] | null {
+  const scorer = makeModeScorer(state.mode, state);
+  const candidates = enumerateAll(state.grid, scorer).filter((c) => {
+    const tiles = c.path.map(({ r, c: col }) => state.grid[r][col] as Tile);
+    return isChainCommittable(c.path, tiles, state.mode);
+  });
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b.score - a.score);
+  const topK = candidates.slice(0, HEURISTIC_K);
+
+  let best: { path: Coord[]; total: number } | null = null;
+  for (const cand of topK) {
+    const plan = planCommit(state, cand.path);
+    if (!plan) continue;
+    const boardScore = plan.finalState.gameOver
+      ? HEURISTIC_GAMEOVER_PENALTY
+      : evaluateBoard(plan.finalState.grid, plan.finalState.mode);
+    const total = cand.score + boardScore;
+    if (!best || total > best.total) best = { path: cand.path, total };
+  }
+  return best?.path ?? null;
+}
+
 export type RunOpts = {
   strength?: number;
   softness?: number;
@@ -325,6 +572,13 @@ export function runBot(seed: number, algo: SpawnAlgo, opts: RunOpts = {}): BotRe
         policy === "lookahead1"  ? pickBestChainLookahead(state)
         : policy === "random"    ? pickRandomChain(state.grid, mode, botRng)
         : policy === "expectimax2" ? pickBestChainExpectimax2(state, botRng)
+        : policy === "heuristic" ? pickBestChainHeuristic(state)
+        : policy === "aggressive" ? pickBestChainPersona("aggressive", state.grid, mode, state)
+        : policy === "longChain" ? pickBestChainPersona("longChain", state.grid, mode, state)
+        : policy === "casual"    ? pickArchetypeChain("casual", state.grid, mode, state)
+        : policy === "engaged"   ? pickArchetypeChain("engaged", state.grid, mode, state)
+        : policy === "skilled"   ? pickArchetypeChain("skilled", state.grid, mode, state)
+        : policy === "speedrunner" ? pickArchetypeChain("speedrunner", state.grid, mode, state)
         : pickBestChainGreedy(state.grid, mode, state);
       botDecisionMs += performance.now() - tDec0;
       if (!path || path.length < 2) { terminationReason = "noChainFound"; break; }

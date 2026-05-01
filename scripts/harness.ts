@@ -24,8 +24,9 @@ import { main as sweepMain } from "./sweep-config";
 import { main as baselineMain } from "./baseline";
 import { main as compareMain } from "./compare";
 import { main as powerMain } from "./power";
+import { main as championMain } from "./champion";
 
-const COMMANDS = ["bench", "sweep", "baseline", "study", "replay", "compare", "power", "describe", "help"] as const;
+const COMMANDS = ["bench", "sweep", "baseline", "study", "replay", "compare", "power", "champion", "describe", "help"] as const;
 type Command = (typeof COMMANDS)[number];
 
 function help(): void {
@@ -40,6 +41,7 @@ Subcommands:
   replay <manifest.json>  Re-run with the same args/seeds as a past manifest.
   compare <a> <b>         Paired-bootstrap delta CIs between two bench manifests.
   power [flags]           Required N for a target MDE given variance.
+  champion [--promote]    Drift check vs frozen champion (--promote to update).
   describe <topic>        Schema endpoint: metrics | bots | modes | algos | all.
   help                    This message.
 
@@ -172,6 +174,7 @@ export async function main(argv: string[]): Promise<void> {
     }
     case "compare":   return compareMain(rest);
     case "power":     return powerMain(rest);
+    case "champion":  return championMain(rest);
     case "describe":  return runDescribe(rest[0]);
     case "help":      return help();
     default:

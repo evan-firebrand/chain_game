@@ -48,7 +48,7 @@ export const METRICS: MetricEntry[] = [
 
 export type BotEntry = {
   name: string;
-  policy: "greedy" | "lookahead1" | "random" | "expectimax2";
+  policy: "greedy" | "lookahead1" | "random" | "expectimax2" | "heuristic" | "aggressive" | "longChain";
   description: string;
   skillTier: "floor" | "low" | "mid" | "high" | "ceiling";
   notes: string;
@@ -68,6 +68,27 @@ export const BOTS: BotEntry[] = [
     description: "Picks the immediate chain with the highest mode-aware score (mergeValue × multiplier × pathLength + Wilds urgency bonus).",
     skillTier: "mid",
     notes: "Myopic. Default policy. DFS-enumerates all chains up to depth 5.",
+  },
+  {
+    name: "heuristic",
+    policy: "heuristic",
+    description: "Top-K=32 immediate candidates by greedy score; re-ranks by chainScore + 50×freeSpace + 100×longestChainRemaining(post). Designed as a mid-tier upgrade over greedy.",
+    skillTier: "mid",
+    notes: "Empirically NOT better than greedy: paired CI on Δ(levels) includes 0 at N=30 (weighted +9 ± 17, antiPair +9 ± 27). Finding: hand-tuned board heuristics don't transfer from 2048-swipe to 2248-chain games — the chain choice captures most strategic value already. Kept in the library as a sanity check / negative result; use greedy or lookahead1 in practice.",
+  },
+  {
+    name: "aggressive",
+    policy: "aggressive",
+    description: "Style persona. Picks the chain with highest mergeValue² × √pathLength — strongly prefers big merges over long chains.",
+    skillTier: "mid",
+    notes: "Not a skill-tier addition — a play-pattern probe. Expect higher peak/score per move but fewer total levels (short chains miss multi-target setups).",
+  },
+  {
+    name: "longChain",
+    policy: "longChain",
+    description: "Style persona. Picks the chain with highest mergeValue × pathLength² — strongly prefers length over merge value.",
+    skillTier: "mid",
+    notes: "Not a skill-tier addition — a play-pattern probe. Expect higher avgChainLen and possibly more levels (longer chains hit more targets) but lower peak.",
   },
   {
     name: "lookahead1",
