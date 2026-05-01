@@ -27,12 +27,19 @@ export {
   strategicHumanLikeStrategy,
 } from './strategies/long-chain.js';
 export {
+  casualStrategy,
+  engagedStrategy,
+  skilledStrategy,
+  speedrunnerStrategy,
+} from './strategies/archetypes.js';
+export {
   buildConstructiveChain,
   candidateFromChain,
   countIsolatedRetiredTiles,
   countLegalChainStarts,
   countRetiredTiles,
   enumerateCandidateChains,
+  findBestDeepChain,
   findLegalChainStarts,
   legalExtensionsForChain,
   toDecision,
