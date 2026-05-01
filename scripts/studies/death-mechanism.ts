@@ -38,6 +38,7 @@ import type {
 } from '../../src/game-kernel/index.js';
 
 import {
+  adaptiveStrategy,
   casualStrategy,
   cleanupPrioritizerStrategy,
   countIsolatedRetiredTiles,
@@ -604,6 +605,7 @@ function archetypeList(): readonly SimStrategy[] {
     retirementAvoiderStrategy,
     sweeperStrategy,
     cleanupPrioritizerStrategy,
+    adaptiveStrategy,
   ];
 }
 
