@@ -343,3 +343,21 @@ describe('spawnTiles (via applyAction)', () => {
     expect(nextA.prngState).toBe(nextB.prngState);
   });
 });
+
+describe('spawnTiles — weight derivation', () => {
+  it('derives weight for min tier when spawnPoolMax equals spawnPoolMin and no weight configured', () => {
+    // Covers the previousTier===null branch in pickTileValue:
+    // previousTileValue(MIN_TILE_VALUE=2) returns null, so fallback key is 0
+    const config: GameConfig = {
+      ...DEFAULT_CONFIG,
+      gridRows: 1,
+      gridCols: 1,
+      spawnPoolMin: 2 as TileValue,
+      spawnPoolMax: 2 as TileValue,
+      spawnWeights: {},
+    };
+    const board: Board = [[{ value: 0 as TileValue, retired: false }]] as Board;
+    const { spawned } = KernelAPI.spawnTiles(board, 2, config, 1);
+    expect(spawned[0]?.value).toBe(2);
+  });
+});

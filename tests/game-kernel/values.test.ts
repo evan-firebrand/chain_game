@@ -53,7 +53,7 @@ describe('forEachTileValueInRange', () => {
 
   it('stops iterating when nextTileValue overflows safe-integer range', () => {
     const visited: number[] = [];
-    const bigValue = Math.pow(2, 52) as TileValue; // nextTileValue(2^52) = 2^53, not safe
+    const bigValue = Math.pow(2, 52); // nextTileValue(2^52) = 2^53, not safe
     forEachTileValueInRange(bigValue, bigValue, v => visited.push(v));
     expect(visited).toEqual([bigValue]);
   });
