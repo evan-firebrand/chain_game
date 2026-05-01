@@ -51,6 +51,13 @@ describe('forEachTileValueInRange', () => {
     expect(visited).toEqual([]);
   });
 
+  it('stops iterating when nextTileValue overflows safe-integer range', () => {
+    const visited: number[] = [];
+    const bigValue = Math.pow(2, 52) as TileValue; // nextTileValue(2^52) = 2^53, not safe
+    forEachTileValueInRange(bigValue, bigValue, v => visited.push(v));
+    expect(visited).toEqual([bigValue]);
+  });
+
   it('visits all powers of 2 from min to max inclusive', () => {
     const visited: number[] = [];
     forEachTileValueInRange(4 as TileValue, 16 as TileValue, v => visited.push(v));

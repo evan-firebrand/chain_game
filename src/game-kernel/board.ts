@@ -59,9 +59,10 @@ export function applyGravity(board: Board): Board {
     // Collect non-empty tiles from top to bottom
     const nonEmpty: Tile[] = [];
     for (let r = 0; r < rows; r++) {
-      /* v8 ignore next 1 - board[r] is always defined since r < rows */
       const tile = board[r]?.[c];
-      if (tile !== undefined && tile.value !== 0) {
+      /* v8 ignore next 2 - board[r] is always defined since r < rows */
+      if (tile === undefined) continue;
+      if (tile.value !== 0) {
         nonEmpty.push(tile);
       }
     }
@@ -132,9 +133,10 @@ function findEmptyCells(board: Board): Cell[] {
 
   for (let c = 0; c < cols; c++) {
     for (let r = 0; r < rows; r++) {
-      /* v8 ignore next 1 - board[r] is always defined since r < rows */
       const tile = board[r]?.[c];
-      if (tile !== undefined && tile.value === 0) {
+      /* v8 ignore next 2 - board[r] is always defined since r < rows */
+      if (tile === undefined) continue;
+      if (tile.value === 0) {
         empties.push({ row: r as Row, col: c as Col });
       }
     }
