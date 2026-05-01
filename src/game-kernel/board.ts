@@ -132,6 +132,7 @@ function findEmptyCells(board: Board): Cell[] {
 
   for (let c = 0; c < cols; c++) {
     for (let r = 0; r < rows; r++) {
+      /* v8 ignore next 1 - board[r] is always defined since r < rows */
       const tile = board[r]?.[c];
       if (tile !== undefined && tile.value === 0) {
         empties.push({ row: r as Row, col: c as Col });

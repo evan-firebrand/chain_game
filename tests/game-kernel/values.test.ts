@@ -39,6 +39,12 @@ describe('forEachTileValueInRange', () => {
     expect(visited).toEqual([]);
   });
 
+  it('does nothing when max is not a playable value', () => {
+    const visited: number[] = [];
+    forEachTileValueInRange(4 as TileValue, 7 as TileValue, v => visited.push(v));
+    expect(visited).toEqual([]);
+  });
+
   it('does nothing when min is not a playable value', () => {
     const visited: number[] = [];
     forEachTileValueInRange(3 as TileValue, 8 as TileValue, v => visited.push(v));
