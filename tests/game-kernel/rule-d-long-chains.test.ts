@@ -117,7 +117,7 @@ describe('Rule D — depth cap boundary: chain ≥ 6 vs chain ≤ 5', () => {
   it('result strictly increases with chain length for uniform-value chains', () => {
     const results: number[] = [];
     for (let len = 2; len <= 6; len++) {
-      const { board, chain } = chainFromValues(Array(len).fill(2));
+      const { board, chain } = chainFromValues(Array<number>(len).fill(2));
       results.push(computeChainResult(board, chain, CONFIG));
     }
     // Each new bonus threshold doubles the result.
