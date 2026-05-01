@@ -14,6 +14,7 @@ export function isPlayableTileValue(value: number): value is TileValue {
 export function nextTileValue(value: TileValue): TileValue | null {
   if (!isPlayableTileValue(value)) return null;
   const next = value * 2;
+  /* v8 ignore next 1 */
   return Number.isSafeInteger(next) ? next : null;
 }
 

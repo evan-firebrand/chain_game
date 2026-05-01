@@ -11,7 +11,6 @@ import type {
   GameState,
   Row,
   Col,
-  Tile,
   TileValue,
 } from '../../game-kernel/index.js';
 import type {
@@ -265,7 +264,7 @@ export function findBestDeepChain(
   function dfs(): void {
     if (path.length >= 2) {
       const rv = computeChainResult(board, path, state.config);
-      const candidate: CandidateChain = { chain: path.slice() as Cell[], resultValue: rv };
+      const candidate: CandidateChain = { chain: path.slice(), resultValue: rv };
       const s = scoreCandidate(candidate);
       if (s > bestScore) {
         bestScore = s;
@@ -276,13 +275,13 @@ export function findBestDeepChain(
 
     const last = path[path.length - 1];
     if (last === undefined) return;
-    const lastTile = board[last.row]?.[last.col] as Tile | undefined;
+    const lastTile = board[last.row]?.[last.col];
     if (!lastTile || lastTile.value === 0) return;
 
     for (const neighbor of getAdjacentCells(last, rows, cols).sort(compareCell)) {
       const key = cellKey(neighbor);
       if (used.has(key)) continue;
-      const neighborTile = board[neighbor.row]?.[neighbor.col] as Tile | undefined;
+      const neighborTile = board[neighbor.row]?.[neighbor.col];
       if (!neighborTile || neighborTile.value === 0) continue;
 
       // Chain start (length === 1): neighbor must have the same value.
@@ -303,10 +302,11 @@ export function findBestDeepChain(
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      const tile = board[r]?.[c] as Tile | undefined;
+      const tile = board[r]?.[c];
       if (!tile || tile.value === 0) continue;
-      path.push({ row: r as Row, col: c as Col });
-      used.add(cellKey(path[0]!));
+      const startCell: Cell = { row: r as Row, col: c as Col };
+      path.push(startCell);
+      used.add(cellKey(startCell));
       dfs();
       path.pop();
       used.clear();

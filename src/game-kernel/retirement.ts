@@ -26,6 +26,7 @@ export function advanceSpawnPool(
   const spawnPoolMin = nextTileValue(retiredTier);
   const spawnPoolMax = nextTileValue(config.spawnPoolMax);
 
+  /* v8 ignore next 7 - nextTileValue only returns null past safe-integer range */
   if (spawnPoolMin === null || spawnPoolMax === null) {
     return {
       spawnPoolMin: config.spawnPoolMin,
