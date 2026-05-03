@@ -23,7 +23,8 @@ export type StrategyId =
   | 'speedrunner'
   | 'retirementAvoider'
   | 'sweeper'
-  | 'cleanupPrioritizer';
+  | 'cleanupPrioritizer'
+  | 'adaptive';
 
 export type RetirementModeLabel = 'cascade';
 

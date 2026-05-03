@@ -1,7 +1,9 @@
-// Tests for the three research-probe archetypes:
+// Tests for the research-probe archetypes:
 //   retirementAvoiderStrategy — refuses to create tiles higher than max-on-board
 //   sweeperStrategy           — prefers chains whose result == 2 × spawnPoolMin
 //   cleanupPrioritizerStrategy — prefers chains that include retired cells
+//   adaptiveStrategy          — phase-aware: greedy in free play, non-escalating
+//                               cleanup once retired tiles exist
 //
 // These archetypes are not canonical player skill tiers; they exist to probe
 // hypotheses about what mechanism kills games (see plan / findings doc).
@@ -10,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_CONFIG, createGame, setTile, validateChain } from '../../src/game-kernel/index.js';
 import type { Board, Cell, GameState, TileValue } from '../../src/game-kernel/index.js';
 import {
+  adaptiveStrategy,
   cleanupPrioritizerStrategy,
   retirementAvoiderStrategy,
   sweeperStrategy,
@@ -226,6 +229,113 @@ describe('cleanupPrioritizerStrategy', () => {
     expect(action).not.toBeNull();
     if (action !== null) {
       // The 3-cell row-0 chain wins.
+      expect(action.chain.length).toBe(3);
+    }
+  });
+});
+
+describe('adaptiveStrategy', () => {
+  it('returns a valid chain or null', () => {
+    const state = createGame({ ...DEFAULT_CONFIG, prngSeed: 7 });
+    const { action } = adaptiveStrategy.chooseAction(state);
+    if (action !== null) {
+      expect(validateChain(state.board, action.chain).valid).toBe(true);
+    }
+  });
+
+  it('plays free-play greedy (highest resultValue) when no retired tiles exist', () => {
+    // No retired tiles → free-play phase. Two chains:
+    //   [2, 2] → result 4
+    //   [4, 4] → result 8
+    // Adaptive should pick [4,4] (greedy by resultValue), same as `skilled`.
+    let board = emptyBoard(7, 6);
+    board = setTile(board, cell(0, 0), { value: 2 as TileValue, retired: false });
+    board = setTile(board, cell(0, 1), { value: 2 as TileValue, retired: false });
+    board = setTile(board, cell(3, 0), { value: 4 as TileValue, retired: false });
+    board = setTile(board, cell(3, 1), { value: 4 as TileValue, retired: false });
+    const state = stateFromBoard(board, 4 as TileValue);
+
+    const { action, diagnostics } = adaptiveStrategy.chooseAction(state);
+    expect(action).not.toBeNull();
+    expect(diagnostics?.projectedResultValue).toBe(8);
+    expect(diagnostics?.mode).toBe('greedy');
+    expect(diagnostics?.reasonCode).toBe('adaptive-free-play');
+  });
+
+  it('switches to cleanup mode when any retired tile is on the board', () => {
+    // One retired 2 alongside a chain of normal 4s.
+    //   [2(retired), 2]  → result 4, includes 1 retired, ≤ ceiling 8 (preferred)
+    //   [4, 4]           → result 8, no retired (fallback)
+    // Free-play would pick [4,4]. Adaptive in cleanup mode picks the retired-
+    // including chain because it's preferred-tier.
+    let board = emptyBoard(7, 6);
+    board = setTile(board, cell(0, 0), { value: 2 as TileValue, retired: true });
+    board = setTile(board, cell(0, 1), { value: 2 as TileValue, retired: false });
+    board = setTile(board, cell(3, 0), { value: 4 as TileValue, retired: false });
+    board = setTile(board, cell(3, 1), { value: 4 as TileValue, retired: false });
+    const state = stateFromBoard(board, 8 as TileValue);
+
+    const { action, diagnostics } = adaptiveStrategy.chooseAction(state);
+    expect(action).not.toBeNull();
+    expect(diagnostics?.mode).toBe('cleanup');
+    expect(diagnostics?.reasonCode).toBe('adaptive-cleanup-non-escalating');
+    expect(diagnostics?.projectedResultValue).toBe(4);
+  });
+
+  it('refuses to escalate in cleanup mode: prefers non-escalating cleanup over higher-result cleanup', () => {
+    // Ceiling = max-on-board = 8. Two cleanup-eligible chains:
+    //   [2(retired), 2]            → result 4  (≤ 8, preferred)
+    //   [4(retired), 4(retired)]   → result 8  (≤ 8, preferred — same retired count? no, has 2 retired)
+    // To isolate the non-escalation rule, pair a low cleanup with an escalating cleanup:
+    //   [2(retired), 2(retired)] → result 4, retired=2 ≤ 8 (preferred)
+    //   [8(retired), 8]          → result 16, retired=1 > 8 (NOT preferred — escalates)
+    // Adaptive picks the non-escalating chain even though the other has fewer
+    // retired but a much bigger resultValue.
+    let board = emptyBoard(7, 6);
+    board = setTile(board, cell(0, 0), { value: 2 as TileValue, retired: true });
+    board = setTile(board, cell(0, 1), { value: 2 as TileValue, retired: true });
+    board = setTile(board, cell(3, 0), { value: 8 as TileValue, retired: true });
+    board = setTile(board, cell(3, 1), { value: 8 as TileValue, retired: false });
+    const state = stateFromBoard(board, 8 as TileValue);
+
+    const { action, diagnostics } = adaptiveStrategy.chooseAction(state);
+    expect(action).not.toBeNull();
+    expect(diagnostics?.projectedResultValue).toBe(4);
+  });
+
+  it('falls back to resultValue when no non-escalating cleanup chain exists', () => {
+    // Only chain available is escalating: [8(retired), 8] → result 16, ceiling = 8.
+    // No preferred chain exists. Adaptive falls back to byResultValue,
+    // picking the only chain (which escalates).
+    let board = emptyBoard(3, 3);
+    board = setTile(board, cell(0, 0), { value: 8 as TileValue, retired: true });
+    board = setTile(board, cell(0, 1), { value: 8 as TileValue, retired: false });
+    const state = stateFromBoard(board, 8 as TileValue);
+
+    const { action, diagnostics } = adaptiveStrategy.chooseAction(state);
+    expect(action).not.toBeNull();
+    expect(diagnostics?.projectedResultValue).toBe(16);
+  });
+
+  it('among non-escalating cleanup chains, prefers more retired cells', () => {
+    // Lone 4 in a corner sets max-on-board = 4 (the non-escalation ceiling).
+    // Two cleanup-eligible chains:
+    //   [2(retired), 2(retired), 2(retired)] → result 4 ≤ 4 ✓, retired=3, length=3
+    //   [2(retired), 2]                       → result 4 ≤ 4 ✓, retired=1, length=2
+    // Both preferred. Scorer is offset + retired*1000 + length, so the
+    // 3-retired chain wins decisively.
+    let board = emptyBoard(7, 6);
+    board = setTile(board, cell(0, 0), { value: 2 as TileValue, retired: true });
+    board = setTile(board, cell(0, 1), { value: 2 as TileValue, retired: true });
+    board = setTile(board, cell(0, 2), { value: 2 as TileValue, retired: true });
+    board = setTile(board, cell(3, 0), { value: 2 as TileValue, retired: true });
+    board = setTile(board, cell(3, 1), { value: 2 as TileValue, retired: false });
+    board = setTile(board, cell(6, 5), { value: 4 as TileValue, retired: false });
+    const state = stateFromBoard(board, 4 as TileValue);
+
+    const { action } = adaptiveStrategy.chooseAction(state);
+    expect(action).not.toBeNull();
+    if (action !== null) {
       expect(action.chain.length).toBe(3);
     }
   });

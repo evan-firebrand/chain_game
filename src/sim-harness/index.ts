@@ -27,6 +27,7 @@ export {
   strategicHumanLikeStrategy,
 } from './strategies/long-chain.js';
 export {
+  adaptiveStrategy,
   casualStrategy,
   cleanupPrioritizerStrategy,
   engagedStrategy,

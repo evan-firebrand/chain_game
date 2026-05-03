@@ -9,6 +9,11 @@
 //                 available chain by resultValue.
 //   speedrunner — depth 20, scores by resultValue² / chainLength; prefers
 //                 high-value merges on fewer tiles.
+//   adaptive    — depth 20, phase-aware. Plays free-play greedy when no retired
+//                 tiles are on the board; switches to non-escalating cleanup
+//                 (prefers chains containing retired cells whose result stays
+//                 ≤ maxOnBoard) once retirement has fired. Tests the lifecycle
+//                 framing: can a phase-switching bot conquer tiers?
 //
 // Research probes (NOT canonical skill tiers — used by studies to probe
 // specific hypotheses about death mechanism):
@@ -19,17 +24,24 @@
 //   sweeper             — depth 12; prefers chains that consume the about-to-
 //                         retire bottom tier without producing higher tiles.
 //                         Used to test whether bottom-tier cleanup matters.
-//   cleanupPrioritizer  — depth 12; prefers chains that include retired cells.
-//                         Models the strategy a real player adopts: clear
-//                         retired tiles before they get stranded by gravity.
-//                         Tests whether the design rewards adaptive cleanup.
+//   cleanupPrioritizer  — depth 12; prefers chains that include retired cells
+//                         but ALWAYS prefers big chains within that constraint
+//                         (escalates aggressively). Known-bad probe — its
+//                         escalation triggers the next retirement before the
+//                         current cleanup finishes. Preserved as comparison
+//                         point for adaptive (which non-escalates).
 //
 // All use findBestDeepChain (O(depth) memory) rather than
 // enumerateCandidateChains so deep depths don't OOM.
 
 import type { GameState, TileValue } from '../../game-kernel/index.js';
 import type { SimStrategy, StrategyDecision } from '../types.js';
-import { findBestDeepChain, maxTileOnBoard, toDecision } from './common.js';
+import {
+  countRetiredTiles,
+  findBestDeepChain,
+  maxTileOnBoard,
+  toDecision,
+} from './common.js';
 import type { CandidateChain } from './common.js';
 
 // Score tiers are separated by a large additive offset so a "preferred" chain
@@ -131,6 +143,54 @@ export const sweeperStrategy: SimStrategy = {
       'cleanup',
       'sweep-bottom-tier',
       'cleanup'
+    );
+  },
+};
+
+// Phase-aware adaptive bot. When no retired tiles exist, plays free-play
+// greedy (resultValue, depth 20). When retired tiles are on the board,
+// switches to non-escalating cleanup: prefers chains that include retired
+// cells AND whose result does not exceed maxOnBoard (so the cleanup itself
+// does not trigger the next retirement). Within preferred chains, scores by
+// retiredCount * 1000 + chain.length — clear more retired tiles per turn,
+// tiebreak by longer chain. When no preferred chain exists, falls back to
+// resultValue (which may escalate — accepted weakness for v1).
+//
+// This is the bot the death-mechanism findings doc identifies as "the actual
+// test of 'does the design work?'" If this bot conquers multiple tiers per
+// game, the lifecycle is mechanically validated.
+export const adaptiveStrategy: SimStrategy = {
+  id: 'adaptive',
+  chooseAction(state: GameState): StrategyDecision {
+    const board = state.board;
+    const inCleanupPhase = countRetiredTiles(board) > 0;
+
+    if (inCleanupPhase) {
+      const ceiling: TileValue = maxTileOnBoard(board);
+      const score = (c: CandidateChain): number => {
+        let retiredCount = 0;
+        for (const cell of c.chain) {
+          const tile = board[cell.row]?.[cell.col];
+          if (tile?.retired === true) retiredCount++;
+        }
+        if (retiredCount > 0 && c.resultValue <= ceiling) {
+          return PREFERRED_TIER_OFFSET + retiredCount * 1000 + c.chain.length;
+        }
+        return c.resultValue;
+      };
+      return toDecision(
+        findBestDeepChain(state, 20, score),
+        'cleanup',
+        'adaptive-cleanup-non-escalating',
+        'cleanup'
+      );
+    }
+
+    return toDecision(
+      findBestDeepChain(state, 20, byResultValue),
+      'greedy',
+      'adaptive-free-play',
+      'push'
     );
   },
 };
