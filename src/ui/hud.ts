@@ -1,83 +1,116 @@
-import type { Board, GameState } from '../game-session/index.js';
+import type { Board, GameState, TileValue } from '../game-session/index.js';
+import { tileTheme, formatTileValue } from './theme.js';
 
 export type LifecyclePhase = 'free-play' | 'cleanup' | 'conquest';
 
 export interface HudElements {
+  root: HTMLElement;
+  title: HTMLElement;
   turn: HTMLElement;
-  phase: HTMLElement;
   maxTile: HTMLElement;
   spawnPool: HTMLElement;
   chainValue: HTMLElement;
-  conquestBanner: HTMLElement;
+  chainStat: HTMLElement;
+  phase: HTMLElement;
+  toolbar: HTMLElement;
   gameOver: HTMLElement;
   tuningToggle: HTMLButtonElement;
+  banner: HTMLElement;
 }
 
+interface HudCache {
+  turn: number;
+  max: TileValue;
+  pool: string;
+  chain: number | null;
+}
+
+const cache = new WeakMap<HudElements, HudCache>();
+
 export function createHud(container: HTMLElement): HudElements {
-  const topBar = document.createElement('div');
-  topBar.className = 'hud-top';
+  const root = document.createElement('header');
+  root.className = 'hud-root';
 
-  const turnEl = document.createElement('div');
-  turnEl.className = 'hud-stat';
-  turnEl.innerHTML = '<span class="hud-label">TURN</span><span class="hud-value" id="hud-turn">0</span>';
-
-  const phaseEl = document.createElement('div');
-  phaseEl.className = 'hud-stat';
-  phaseEl.innerHTML = '<span class="hud-label">PHASE</span><span class="hud-value hud-phase" id="hud-phase" data-phase="free-play">Free Play</span>';
-
-  const maxTileEl = document.createElement('div');
-  maxTileEl.className = 'hud-stat';
-  maxTileEl.innerHTML = '<span class="hud-label">BEST</span><span class="hud-value" id="hud-max">—</span>';
-
-  const spawnPoolEl = document.createElement('div');
-  spawnPoolEl.className = 'hud-stat';
-  spawnPoolEl.innerHTML = '<span class="hud-label">POOL</span><span class="hud-value" id="hud-pool">2–256</span>';
-
-  const chainValueEl = document.createElement('div');
-  chainValueEl.className = 'hud-stat';
-  chainValueEl.innerHTML = '<span class="hud-label">CHAIN</span><span class="hud-value" id="hud-chain">—</span>';
-
-  const tuningToggle = document.createElement('button');
-  tuningToggle.type = 'button';
-  tuningToggle.className = 'hud-tuning-toggle';
-  tuningToggle.setAttribute('aria-label', 'Toggle tuning panel');
-  tuningToggle.textContent = '⚙';
-
-  topBar.appendChild(turnEl);
-  topBar.appendChild(chainValueEl);
-  topBar.appendChild(phaseEl);
-  topBar.appendChild(maxTileEl);
-  topBar.appendChild(spawnPoolEl);
-  topBar.appendChild(tuningToggle);
-  container.appendChild(topBar);
-
-  const conquestBannerEl = document.createElement('div');
-  conquestBannerEl.className = 'conquest-banner hidden';
-  conquestBannerEl.id = 'conquest-banner';
-  conquestBannerEl.textContent = '🎉 TIER CONQUERED';
-  container.appendChild(conquestBannerEl);
-
-  const gameOverEl = document.createElement('div');
-  gameOverEl.className = 'game-over-overlay hidden';
-  gameOverEl.innerHTML = `
-    <div class="game-over-box">
-      <div class="game-over-title">GAME OVER</div>
-      <div id="game-over-stats"></div>
-      <button id="game-over-restart">Play Again</button>
+  const branding = document.createElement('div');
+  branding.className = 'hud-branding';
+  branding.innerHTML = `
+    <div class="hud-mark">
+      <span class="hud-mark-glyph">⌬</span>
+      <span class="hud-mark-word">CHAIN</span>
+    </div>
+    <div class="hud-phase" id="hud-phase" data-phase="free-play">
+      <span class="hud-phase-dot" aria-hidden="true"></span>
+      <span class="hud-phase-label">Free Play</span>
+    </div>
+    <div class="hud-toolbar">
+      <button type="button" class="hud-tuning-toggle" aria-label="Toggle tuning panel">
+        <span class="hud-tuning-icon">⚙</span>
+        <span class="hud-tuning-label">TUNING</span>
+      </button>
     </div>
   `;
-  container.appendChild(gameOverEl);
+  root.appendChild(branding);
 
-  return {
-    turn: document.getElementById('hud-turn') as HTMLElement,
-    phase: document.getElementById('hud-phase') as HTMLElement,
-    maxTile: document.getElementById('hud-max') as HTMLElement,
-    spawnPool: document.getElementById('hud-pool') as HTMLElement,
-    chainValue: document.getElementById('hud-chain') as HTMLElement,
-    conquestBanner: conquestBannerEl,
-    gameOver: gameOverEl,
-    tuningToggle,
+  const stats = document.createElement('div');
+  stats.className = 'hud-stats';
+  stats.innerHTML = `
+    <div class="hud-stat" data-stat="turn">
+      <span class="hud-label">turn</span>
+      <span class="hud-value" id="hud-turn">0</span>
+    </div>
+    <div class="hud-stat" data-stat="chain" id="hud-chain-stat">
+      <span class="hud-label">chain</span>
+      <span class="hud-value hud-value--accent" id="hud-chain">—</span>
+    </div>
+    <div class="hud-stat" data-stat="max">
+      <span class="hud-label">best tile</span>
+      <span class="hud-value hud-value--big" id="hud-max">—</span>
+    </div>
+    <div class="hud-stat" data-stat="pool">
+      <span class="hud-label">pool</span>
+      <span class="hud-value hud-value--mono" id="hud-pool">2 / 256</span>
+    </div>
+  `;
+  root.appendChild(stats);
+
+  container.appendChild(root);
+
+  const banner = document.createElement('div');
+  banner.className = 'hud-banner';
+  banner.setAttribute('aria-live', 'polite');
+  container.appendChild(banner);
+
+  const gameOver = document.createElement('div');
+  gameOver.className = 'game-over hidden';
+  gameOver.innerHTML = `
+    <div class="game-over-card">
+      <div class="game-over-eyebrow">RUN COMPLETE</div>
+      <div class="game-over-title">no chain remains</div>
+      <div class="game-over-stats" id="game-over-stats"></div>
+      <button id="game-over-restart" class="game-over-cta">
+        <span>BEGIN ANEW</span>
+        <span aria-hidden="true">→</span>
+      </button>
+    </div>
+  `;
+  container.appendChild(gameOver);
+
+  const elements: HudElements = {
+    root,
+    title: branding.querySelector('.hud-mark') as HTMLElement,
+    turn: stats.querySelector('#hud-turn') as HTMLElement,
+    maxTile: stats.querySelector('#hud-max') as HTMLElement,
+    spawnPool: stats.querySelector('#hud-pool') as HTMLElement,
+    chainValue: stats.querySelector('#hud-chain') as HTMLElement,
+    chainStat: stats.querySelector('#hud-chain-stat') as HTMLElement,
+    phase: branding.querySelector('#hud-phase') as HTMLElement,
+    toolbar: branding.querySelector('.hud-toolbar') as HTMLElement,
+    gameOver,
+    tuningToggle: branding.querySelector('.hud-tuning-toggle') as HTMLButtonElement,
+    banner,
   };
+  cache.set(elements, { turn: 0, max: 0, pool: '', chain: null });
+  return elements;
 }
 
 export function countRetiredTiles(board: Board): number {
@@ -94,48 +127,120 @@ export function lifecyclePhase(state: GameState): 'free-play' | 'cleanup' {
   return countRetiredTiles(state.board) > 0 ? 'cleanup' : 'free-play';
 }
 
-export function updateHud(hud: HudElements, state: GameState): void {
-  hud.turn.textContent = String(state.turn);
-  hud.maxTile.textContent = state.maxTileEver === 0 ? '—' : String(state.maxTileEver);
-  hud.spawnPool.textContent = `${state.spawnPoolMin}–${state.spawnPoolMax}`;
+const PHASE_LABEL: Record<LifecyclePhase, string> = {
+  'free-play': 'Free Play',
+  'cleanup': 'Cleanup',
+  'conquest': '🎉 Conquest',
+};
 
-  // Phase indicator. Conquest is a transient flash; the steady-state values
-  // are free-play / cleanup. setPhase() handles the transient externally.
-  const phase = lifecyclePhase(state);
+function setPhase(hud: HudElements, phase: LifecyclePhase): void {
+  if (hud.phase.dataset.phase === phase) return;
+  hud.phase.dataset.phase = phase;
+  const labelEl = hud.phase.querySelector('.hud-phase-label');
+  if (labelEl !== null) labelEl.textContent = PHASE_LABEL[phase];
+}
+
+/**
+ * Flash the conquest pill. Auto-reverts to free-play after duration.
+ * The full-screen confetti is handled separately via EffectQueue.
+ */
+export function flashConquest(hud: HudElements, durationMs = 2200): void {
+  setPhase(hud, 'conquest');
+  window.setTimeout(() => { setPhase(hud, 'free-play'); }, durationMs);
+}
+
+export function updateHud(hud: HudElements, state: GameState): void {
+  const prev = cache.get(hud) ?? { turn: 0, max: 0 as TileValue, pool: '', chain: null as number | null };
+
+  // Phase indicator. Conquest is a transient state; only update when not
+  // currently flashing it.
   if (hud.phase.dataset.phase !== 'conquest') {
-    hud.phase.dataset.phase = phase;
-    hud.phase.textContent = phase === 'cleanup' ? 'Cleanup' : 'Free Play';
+    setPhase(hud, lifecyclePhase(state));
   }
 
-  if (state.phase === 'game-over') {
-    const statsEl = document.getElementById('game-over-stats');
-    if (statsEl !== null) {
-      statsEl.innerHTML = `
-        <div>Turns: <strong>${state.turn}</strong></div>
-        <div>Best tile: <strong>${state.maxTileEver}</strong></div>
-      `;
+  if (state.turn !== prev.turn) {
+    hud.turn.textContent = String(state.turn);
+    flashStat(hud.turn);
+  }
+
+  if (state.maxTileEver !== prev.max) {
+    const old = prev.max;
+    hud.maxTile.textContent = state.maxTileEver === 0 ? '—' : formatTileValue(state.maxTileEver);
+    hud.maxTile.title = state.maxTileEver === 0 ? '' : String(state.maxTileEver);
+    if (state.maxTileEver > 0) {
+      const theme = tileTheme(state.maxTileEver);
+      hud.maxTile.style.color = theme.aura;
+      hud.maxTile.style.textShadow = `0 0 18px ${theme.glow}`;
     }
-    hud.gameOver.classList.remove('hidden');
+    if (state.maxTileEver > old) flashStat(hud.maxTile, true);
+  }
+
+  const poolText = `${formatTileValue(state.spawnPoolMin)} / ${formatTileValue(state.spawnPoolMax)}`;
+  hud.spawnPool.title = `${state.spawnPoolMin} → ${state.spawnPoolMax}`;
+  if (poolText !== prev.pool) {
+    hud.spawnPool.textContent = poolText;
+    flashStat(hud.spawnPool);
+  }
+
+  cache.set(hud, { turn: state.turn, max: state.maxTileEver, pool: poolText, chain: prev.chain });
+
+  if (state.phase === 'game-over') {
+    showGameOver(hud, state);
   }
 }
 
 export function updateChainPreview(hud: HudElements, value: number | null): void {
-  hud.chainValue.textContent = value !== null ? String(value) : '—';
+  const prev = cache.get(hud) ?? { turn: 0, max: 0 as TileValue, pool: '', chain: null as number | null };
+  if (prev.chain === value) return;
+  hud.chainValue.textContent = value !== null ? formatTileValue(value) : '—';
+  hud.chainValue.title = value !== null ? String(value) : '';
+  if (value !== null && value > 0) {
+    const theme = tileTheme(value);
+    hud.chainValue.style.color = theme.aura;
+    hud.chainValue.style.textShadow = `0 0 14px ${theme.glow}`;
+    hud.chainStat.classList.add('hud-stat--armed');
+  } else {
+    hud.chainValue.style.color = '';
+    hud.chainValue.style.textShadow = '';
+    hud.chainStat.classList.remove('hud-stat--armed');
+  }
+  cache.set(hud, { ...prev, chain: value });
 }
 
-// Flash the conquest celebration. Auto-reverts to free-play after duration.
-// Idempotent: calling while already in conquest extends the duration.
-export function flashConquest(hud: HudElements, durationMs = 2200): void {
-  hud.phase.dataset.phase = 'conquest';
-  hud.phase.textContent = '🎉 Conquest!';
+export function flashBanner(hud: HudElements, text: string, theme?: { color: string; glow: string }): void {
+  hud.banner.textContent = text;
+  hud.banner.classList.remove('hud-banner--show');
+  void hud.banner.offsetWidth;
+  hud.banner.classList.add('hud-banner--show');
+  if (theme !== undefined) {
+    hud.banner.style.color = theme.color;
+    hud.banner.style.textShadow = `0 0 22px ${theme.glow}`;
+  }
+  window.setTimeout(() => { hud.banner.classList.remove('hud-banner--show'); }, 2200);
+}
 
-  hud.conquestBanner.classList.remove('hidden');
-  hud.conquestBanner.classList.add('conquest-banner-active');
+export function clearGameOver(hud: HudElements): void {
+  hud.gameOver.classList.add('hidden');
+  hud.gameOver.classList.remove('game-over--show');
+}
 
-  window.setTimeout(() => {
-    hud.conquestBanner.classList.remove('conquest-banner-active');
-    hud.conquestBanner.classList.add('hidden');
-    hud.phase.dataset.phase = 'free-play';
-    hud.phase.textContent = 'Free Play';
-  }, durationMs);
+function showGameOver(hud: HudElements, state: GameState): void {
+  const statsEl = hud.gameOver.querySelector('#game-over-stats');
+  if (statsEl !== null) {
+    statsEl.innerHTML = `
+      <div class="game-over-stat"><span class="game-over-stat-k">turns</span><span class="game-over-stat-v">${state.turn}</span></div>
+      <div class="game-over-stat"><span class="game-over-stat-k">best tile</span><span class="game-over-stat-v" title="${state.maxTileEver}">${formatTileValue(state.maxTileEver)}</span></div>
+      <div class="game-over-stat"><span class="game-over-stat-k">pool reached</span><span class="game-over-stat-v" title="${state.spawnPoolMin} / ${state.spawnPoolMax}">${formatTileValue(state.spawnPoolMin)} / ${formatTileValue(state.spawnPoolMax)}</span></div>
+    `;
+  }
+  hud.gameOver.classList.remove('hidden');
+  // Force reflow then add show class for transition
+  void hud.gameOver.offsetWidth;
+  hud.gameOver.classList.add('game-over--show');
+}
+
+function flashStat(el: HTMLElement, big = false): void {
+  el.classList.remove('hud-value--flash', 'hud-value--big-flash');
+  void el.offsetWidth;
+  el.classList.add(big ? 'hud-value--big-flash' : 'hud-value--flash');
 }
