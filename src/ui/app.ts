@@ -14,7 +14,7 @@ import {
 } from './board.js';
 import { attachInput } from './input.js';
 import type { InputCallbacks } from './input.js';
-import { createHud, updateHud, updateChainPreview } from './hud.js';
+import { countRetiredTiles, createHud, flashConquest, updateChainPreview, updateHud } from './hud.js';
 import { mountTuningConsole } from '../tuning-console/console.js';
 
 function injectStyles(): void {
@@ -110,6 +110,55 @@ function injectStyles(): void {
     }
     #game-over-restart:hover {
       background: #4a7fa5;
+    }
+    .hud-phase {
+      font-size: 16px;
+      padding: 2px 10px;
+      border-radius: 999px;
+      transition: background 0.25s ease, color 0.25s ease;
+    }
+    .hud-phase[data-phase="free-play"] {
+      background: rgba(76, 175, 90, 0.2);
+      color: #6ddc8a;
+    }
+    .hud-phase[data-phase="cleanup"] {
+      background: rgba(245, 165, 36, 0.22);
+      color: #ffb049;
+    }
+    .hud-phase[data-phase="conquest"] {
+      background: linear-gradient(90deg, #ffd54a, #ff9d3d);
+      color: #1a1a2e;
+      animation: phase-pop 0.45s ease;
+    }
+    @keyframes phase-pop {
+      0% { transform: scale(0.85); }
+      60% { transform: scale(1.12); }
+      100% { transform: scale(1); }
+    }
+    .conquest-banner {
+      position: fixed;
+      top: 25%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.7);
+      background: linear-gradient(135deg, #ffd54a 0%, #ff9d3d 100%);
+      color: #1a1a2e;
+      padding: 16px 36px;
+      border-radius: 14px;
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: 3px;
+      box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+      pointer-events: none;
+      opacity: 0;
+      z-index: 90;
+      transition: opacity 0.25s ease, transform 0.4s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+    }
+    .conquest-banner.hidden {
+      display: none;
+    }
+    .conquest-banner-active {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
     }
   `;
   document.head.appendChild(style);
@@ -229,7 +278,20 @@ function mount(): void {
     };
   }
 
-  let unsubscribe = session.on(() => { render(); });
+  // Track retired-tile count across renders so we can detect the cleanup→
+  // free-play transition (= conquest) and flash the celebration.
+  let prevRetiredCount = countRetiredTiles(session.getState().board);
+
+  function makeListener(): () => void {
+    return (): void => {
+      const retiredCount = countRetiredTiles(session.getState().board);
+      if (prevRetiredCount > 0 && retiredCount === 0) flashConquest(hud);
+      prevRetiredCount = retiredCount;
+      render();
+    };
+  }
+
+  let unsubscribe = session.on(makeListener());
   let detach = attachInput(canvas, session.getState().config.gridRows, session.getState().config.gridCols, makeInputCallbacks());
 
   function rewireSession(newSession: GameSession): void {
@@ -238,7 +300,8 @@ function mount(): void {
     session = newSession;
     const cfg = session.getState().config;
     resizeCanvas(cfg);
-    unsubscribe = session.on(() => { render(); });
+    prevRetiredCount = countRetiredTiles(session.getState().board);
+    unsubscribe = session.on(makeListener());
     detach = attachInput(canvas, cfg.gridRows, cfg.gridCols, makeInputCallbacks());
   }
 
