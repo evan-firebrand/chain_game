@@ -52,6 +52,7 @@ import {
   speedrunnerStrategy,
   sweeperStrategy,
   tilesByTier,
+  weightedHeuristicStrategy,
 } from '../../src/sim-harness/index.js';
 import type {
   GameRunResult,
@@ -605,6 +606,7 @@ function archetypeList(): readonly SimStrategy[] {
     retirementAvoiderStrategy,
     sweeperStrategy,
     cleanupPrioritizerStrategy,
+    weightedHeuristicStrategy,
     adaptiveStrategy,
   ];
 }

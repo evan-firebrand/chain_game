@@ -12,6 +12,7 @@ export type StrategyId =
   | 'random'
   | 'greedy'
   | 'heuristic'
+  | 'weightedHeuristic'
   | 'longRandomWalk'
   | 'longGreedyWalk'
   | 'milestonePush'
