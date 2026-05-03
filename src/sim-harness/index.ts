@@ -20,6 +20,12 @@ export { randomStrategy } from './strategies/random.js';
 export { greedyStrategy } from './strategies/greedy.js';
 export { heuristicStrategy } from './strategies/heuristic.js';
 export {
+  DEFAULT_UNIT_WEIGHTS,
+  makeWeightedHeuristic,
+  weightedHeuristicStrategy,
+} from './strategies/weighted-heuristic.js';
+export type { HeuristicWeights } from './strategies/weighted-heuristic.js';
+export {
   longGreedyWalkStrategy,
   longRandomWalkStrategy,
   milestonePushStrategy,
