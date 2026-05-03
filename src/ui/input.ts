@@ -26,8 +26,11 @@ export function attachInput(
 
   function getCell(e: PointerEvent): Cell | null {
     const rect = canvas.getBoundingClientRect();
-    const scaleX = canvas.width / rect.width;
-    const scaleY = canvas.height / rect.height;
+    const dpr = window.devicePixelRatio || 1;
+    // canvas.width is in device pixels (W * dpr); rect.width is CSS pixels.
+    // We want coords in the ctx space (CSS pixels post-setTransform), so divide out dpr.
+    const scaleX = (canvas.width / rect.width) / dpr;
+    const scaleY = (canvas.height / rect.height) / dpr;
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
     return pixelToCell(x, y, rows, cols);

@@ -1,230 +1,417 @@
 import type { Board, Cell, TileValue } from '../game-session/index.js';
+import {
+  TILE, GAP, RADIUS,
+  tileOriginX, tileOriginY,
+  boardPixelWidth, boardPixelHeight,
+  pixelToCell, roundRectPath,
+} from './geometry.js';
+import {
+  tileTheme, formatTileValue, fitFontSize,
+  EMPTY_CELL_FILL, EMPTY_CELL_BORDER,
+  BOARD_VIGNETTE_INNER, BOARD_VIGNETTE_OUTER,
+  RETIRED_CUT, RETIRED_FILM,
+  VALID_NEXT_GLOW,
+  CHAIN_TRAIL_HEAD, CHAIN_TRAIL_TAIL,
+  FONT_DISPLAY,
+} from './theme.js';
+import { renderEffect, sampleTileAnim, tileCenter } from './effects.js';
+import type { EffectQueue } from './effects.js';
 
-export const TILE = 76;
-export const GAP = 4;
-export const RADIUS = 8;
-
-function tileOffset(index: number): number {
-  return index * (TILE + GAP);
-}
-
-export function boardPixelWidth(cols: number): number {
-  return cols * TILE + (cols - 1) * GAP;
-}
-
-export function boardPixelHeight(rows: number): number {
-  return rows * TILE + (rows - 1) * GAP;
-}
-
-// Nearest-center hit detection: always returns the tile whose center is closest.
-// This makes diagonal movement reliable — gaps are never "dead zones."
-export function pixelToCell(
-  x: number,
-  y: number,
-  rows: number,
-  cols: number,
-): Cell | null {
-  if (rows === 0 || cols === 0) return null;
-  let best: Cell | null = null;
-  let bestDist = Infinity;
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const cx = tileOffset(c) + TILE / 2;
-      const cy = tileOffset(r) + TILE / 2;
-      const dist = (x - cx) * (x - cx) + (y - cy) * (y - cy);
-      if (dist < bestDist) {
-        bestDist = dist;
-        best = { row: r as Cell['row'], col: c as Cell['col'] };
-      }
-    }
-  }
-  return best;
-}
-
-// Hue wheel: low values → cool blues, higher → warm reds/golds
-const TILE_COLORS: Readonly<Partial<Record<TileValue, string>>> = {
-  2:    '#4a7fa5',
-  4:    '#3a6fbf',
-  8:    '#27ae60',
-  16:   '#8bc34a',
-  32:   '#f1c40f',
-  64:   '#e67e22',
-  128:  '#e74c3c',
-  256:  '#c0392b',
-  512:  '#9b59b6',
-  1024: '#6c3483',
-  2048: '#f39c12',
-  4096: '#d4ac0d',
-  8192: '#f5cba7',
-};
-
-function tileColor(value: TileValue): string {
-  return TILE_COLORS[value] ?? '#555';
-}
-
-function textColor(value: TileValue): string {
-  // Dark text on bright tiles
-  if (value === 32 || value === 16 || value === 2048 || value === 4096 || value === 8192) {
-    return '#222';
-  }
-  return '#fff';
-}
-
-function fontSize(value: TileValue): number {
-  if (value >= 1000) return 18;
-  if (value >= 100) return 22;
-  return 26;
-}
-
-function roundRect(
-  ctx: CanvasRenderingContext2D,
-  x: number, y: number,
-  w: number, h: number,
-  r: number,
-): void {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
-}
+export { TILE, GAP, RADIUS, boardPixelWidth, boardPixelHeight, pixelToCell };
 
 export interface RenderState {
   board: Board;
   chain: readonly Cell[];
   previewValue: TileValue | null;
-  /** Cells that could validly extend the current chain (highlighted for player). */
   validExtensions: ReadonlySet<string>;
   rows: number;
   cols: number;
+  effects: EffectQueue;
+  now: number;
 }
 
 export function renderBoard(ctx: CanvasRenderingContext2D, s: RenderState): void {
-  const { board, chain, previewValue, validExtensions, rows, cols } = s;
+  const { board, chain, previewValue, validExtensions, rows, cols, effects, now } = s;
+  const W = boardPixelWidth(cols);
+  const H = boardPixelHeight(rows);
+  ctx.clearRect(0, 0, W, H);
+
+  drawBoardBackdrop(ctx, W, H);
 
   const chainSet = new Set(chain.map(c => `${c.row},${c.col}`));
   const lastCell = chain[chain.length - 1];
+  const hasActiveChain = chain.length > 0;
+  const activeEffects = effects.active();
 
-  ctx.clearRect(0, 0, boardPixelWidth(cols), boardPixelHeight(rows));
-
+  // Pass 1: empty cells (drawn behind everything else)
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const tile = board[r]?.[c];
-      if (tile === undefined) continue;
+      if (tile === undefined || tile.value !== 0) continue;
+      drawEmptyCell(ctx, c, r);
+    }
+  }
 
-      const x = tileOffset(c);
-      const y = tileOffset(r);
+  // Pass 2: tile auras (so they layer below tile bodies but above empty cells)
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const tile = board[r]?.[c];
+      if (tile === undefined || tile.value === 0) continue;
       const key = `${r},${c}`;
       const inChain = chainSet.has(key);
       const isLast = lastCell !== undefined && lastCell.row === r && lastCell.col === c;
       const isValidNext = validExtensions.has(key);
-
-      if (tile.value === 0) {
-        // Empty cell
-        ctx.fillStyle = '#1a1a2e';
-        roundRect(ctx, x, y, TILE, TILE, RADIUS);
-        ctx.fill();
-        continue;
-      }
-
-      // Tile background — dim tiles that can't extend the active chain
-      const hasActiveChain = chainSet.size > 0;
-      const color = tileColor(tile.value);
-      let fillColor = color;
-      if (inChain) fillColor = lighten(color, 0.35);
-      else if (hasActiveChain && !isValidNext) fillColor = darken(color, 0.5);
-      else if (tile.retired) fillColor = darken(color, 0.35);
-      ctx.fillStyle = fillColor;
-      roundRect(ctx, x, y, TILE, TILE, RADIUS);
-      ctx.fill();
-
-      if (tile.retired) {
-        ctx.save();
-        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(x + 14, y + TILE - 14);
-        ctx.lineTo(x + TILE - 14, y + 14);
-        ctx.moveTo(x + 24, y + TILE - 10);
-        ctx.lineTo(x + TILE - 10, y + 24);
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      // Chain highlight border; green pulse on valid-next tiles
-      if (inChain) {
-        ctx.strokeStyle = isLast ? '#ffffff' : 'rgba(255,255,255,0.6)';
-        ctx.lineWidth = isLast ? 3 : 2;
-        roundRect(ctx, x + 1, y + 1, TILE - 2, TILE - 2, RADIUS - 1);
-        ctx.stroke();
-      } else if (isValidNext) {
-        ctx.strokeStyle = 'rgba(120,255,120,0.8)';
-        ctx.lineWidth = 2;
-        roundRect(ctx, x + 1, y + 1, TILE - 2, TILE - 2, RADIUS - 1);
-        ctx.stroke();
-      }
-
-      // Value text
-      ctx.fillStyle = textColor(tile.value);
-      ctx.font = `bold ${fontSize(tile.value)}px system-ui, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(String(tile.value), x + TILE / 2, y + TILE / 2);
-
-      // Preview result badge on last chain cell
-      if (isLast && previewValue !== null) {
-        const bx = x + TILE - 28;
-        const by = y + 4;
-        ctx.fillStyle = 'rgba(0,0,0,0.75)';
-        roundRect(ctx, bx, by, 28, 20, 4);
-        ctx.fill();
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 11px system-ui, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(`→${previewValue}`, bx + 14, by + 10);
-      }
+      const anim = sampleTileAnim(activeEffects, { row: r as Cell['row'], col: c as Cell['col'] }, now);
+      drawTileAura(ctx, c, r, tile.value, {
+        inChain, isLast, isValidNext, hasActiveChain,
+        anim,
+        retired: tile.retired,
+        now,
+      });
     }
   }
 
-  // Draw chain path lines
-  if (chain.length >= 2) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.4)';
-    ctx.lineWidth = 3;
+  // Pass 3: tile bodies + text
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const tile = board[r]?.[c];
+      if (tile === undefined || tile.value === 0) continue;
+      const key = `${r},${c}`;
+      const inChain = chainSet.has(key);
+      const isLast = lastCell !== undefined && lastCell.row === r && lastCell.col === c;
+      const isValidNext = validExtensions.has(key);
+      const anim = sampleTileAnim(activeEffects, { row: r as Cell['row'], col: c as Cell['col'] }, now);
+      drawTileBody(ctx, c, r, tile.value, tile.retired, {
+        inChain, isLast, isValidNext, hasActiveChain,
+        anim,
+        now,
+      });
+    }
+  }
+
+  // Pass 4: chain trail above tiles
+  if (chain.length >= 2) drawChainTrail(ctx, chain, now);
+
+  // Pass 5: preview badge above everything
+  if (lastCell !== undefined && previewValue !== null && chain.length >= 2) {
+    drawPreviewBadge(ctx, lastCell, previewValue, now);
+  }
+
+  // Pass 6: effects (particles, flashes, confetti, sweeps)
+  for (const e of activeEffects) {
+    renderEffect(e, { ctx, now, boardW: W, boardH: H });
+  }
+}
+
+function drawBoardBackdrop(ctx: CanvasRenderingContext2D, W: number, H: number): void {
+  // Subtle radial vignette behind tiles
+  const grad = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.7);
+  grad.addColorStop(0, BOARD_VIGNETTE_INNER);
+  grad.addColorStop(1, BOARD_VIGNETTE_OUTER);
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+}
+
+function drawEmptyCell(ctx: CanvasRenderingContext2D, col: number, row: number): void {
+  const x = tileOriginX(col);
+  const y = tileOriginY(row);
+  ctx.save();
+  roundRectPath(ctx, x, y, TILE, TILE, RADIUS);
+  ctx.fillStyle = EMPTY_CELL_FILL;
+  ctx.fill();
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = EMPTY_CELL_BORDER;
+  ctx.stroke();
+  ctx.restore();
+}
+
+interface DrawOpts {
+  inChain: boolean;
+  isLast: boolean;
+  isValidNext: boolean;
+  hasActiveChain: boolean;
+  anim: ReturnType<typeof sampleTileAnim>;
+  now: number;
+}
+
+function drawTileAura(
+  ctx: CanvasRenderingContext2D,
+  col: number, row: number,
+  value: TileValue,
+  opts: DrawOpts & { retired: boolean },
+): void {
+  const x = tileOriginX(col);
+  const y = tileOriginY(row);
+  const cx = x + TILE / 2;
+  const cy = y + TILE / 2 + opts.anim.yOffset;
+  const theme = tileTheme(value);
+
+  // Base aura — quiet for non-chain tiles, brighter for chain & last cell & valid next
+  let auraStrength = 0.32;
+  let auraRadius = TILE * 0.85;
+  if (opts.inChain) { auraStrength = 0.85; auraRadius = TILE * 1.05; }
+  if (opts.isLast) { auraStrength = 1.05; auraRadius = TILE * 1.2; }
+  if (opts.isValidNext) {
+    const pulse = 0.5 + 0.5 * Math.sin(opts.now / 220);
+    auraStrength = 0.7 + pulse * 0.35;
+    auraRadius = TILE * (1.0 + pulse * 0.1);
+  }
+  // Dim non-eligible tiles when chain is active
+  if (opts.hasActiveChain && !opts.inChain && !opts.isValidNext) auraStrength *= 0.45;
+  if (opts.retired) auraStrength *= 0.6;
+  auraStrength += opts.anim.glowBoost;
+
+  ctx.save();
+  ctx.globalCompositeOperation = 'lighter';
+  const grad = ctx.createRadialGradient(cx, cy, TILE * 0.15, cx, cy, auraRadius);
+  grad.addColorStop(0, theme.glow);
+  grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.fillStyle = grad;
+  ctx.globalAlpha = Math.min(1, auraStrength);
+  ctx.fillRect(cx - auraRadius, cy - auraRadius, auraRadius * 2, auraRadius * 2);
+  ctx.restore();
+}
+
+function drawTileBody(
+  ctx: CanvasRenderingContext2D,
+  col: number, row: number,
+  value: TileValue,
+  retired: boolean,
+  opts: DrawOpts,
+): void {
+  const x = tileOriginX(col);
+  const y = tileOriginY(row);
+  const cx = x + TILE / 2;
+  const cy = y + TILE / 2 + opts.anim.yOffset;
+  const theme = tileTheme(value);
+  const scale = opts.anim.scale;
+
+  ctx.save();
+  ctx.globalAlpha = opts.anim.alpha;
+  ctx.translate(cx, cy);
+  ctx.scale(scale, scale);
+  ctx.translate(-TILE / 2, -TILE / 2);
+
+  // Inactive dimming when chain active (lighten non-eligible)
+  let bodyAlpha = 1;
+  if (opts.hasActiveChain && !opts.inChain && !opts.isValidNext) bodyAlpha = 0.42;
+
+  // Layered fill: vertical gradient from shine → fill
+  const grad = ctx.createLinearGradient(0, 0, 0, TILE);
+  grad.addColorStop(0, mixColor(theme.shine, theme.fill, 0.55));
+  grad.addColorStop(0.55, theme.fill);
+  grad.addColorStop(1, mixColor(theme.fill, '#000000', 0.35));
+
+  ctx.save();
+  ctx.globalAlpha = bodyAlpha;
+  roundRectPath(ctx, 0, 0, TILE, TILE, RADIUS);
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Inner top highlight — narrow band of shine across the top
+  ctx.save();
+  roundRectPath(ctx, 0, 0, TILE, TILE, RADIUS);
+  ctx.clip();
+  const shineGrad = ctx.createLinearGradient(0, 0, 0, TILE * 0.45);
+  shineGrad.addColorStop(0, hexToRgba(theme.shine, 0.45));
+  shineGrad.addColorStop(1, hexToRgba(theme.shine, 0));
+  ctx.fillStyle = shineGrad;
+  ctx.fillRect(0, 0, TILE, TILE * 0.45);
+  ctx.restore();
+
+  // Subtle inner shadow at bottom
+  ctx.save();
+  roundRectPath(ctx, 0, 0, TILE, TILE, RADIUS);
+  ctx.clip();
+  const shadowGrad = ctx.createLinearGradient(0, TILE * 0.5, 0, TILE);
+  shadowGrad.addColorStop(0, 'rgba(0,0,0,0)');
+  shadowGrad.addColorStop(1, 'rgba(0,0,0,0.45)');
+  ctx.fillStyle = shadowGrad;
+  ctx.fillRect(0, TILE * 0.5, TILE, TILE * 0.5);
+  ctx.restore();
+
+  // Hairline outer border
+  roundRectPath(ctx, 0.5, 0.5, TILE - 1, TILE - 1, RADIUS);
+  ctx.strokeStyle = hexToRgba(theme.shine, 0.35);
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.restore();
+
+  // Retired film + cuts
+  if (retired) {
+    ctx.save();
+    roundRectPath(ctx, 0, 0, TILE, TILE, RADIUS);
+    ctx.fillStyle = RETIRED_FILM;
+    ctx.fill();
+
+    // Cross-hatch warning marks
+    ctx.strokeStyle = RETIRED_CUT;
+    ctx.lineWidth = 2.5;
     ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
+    const inset = 14;
     ctx.beginPath();
-    for (let i = 0; i < chain.length; i++) {
-      const cell = chain[i];
-      if (cell === undefined) continue;
-      const cx = tileOffset(cell.col) + TILE / 2;
-      const cy = tileOffset(cell.row) + TILE / 2;
-      if (i === 0) ctx.moveTo(cx, cy);
-      else ctx.lineTo(cx, cy);
-    }
+    ctx.moveTo(inset, inset);
+    ctx.lineTo(TILE - inset, TILE - inset);
+    ctx.moveTo(TILE - inset, inset);
+    ctx.lineTo(inset, TILE - inset);
     ctx.stroke();
+    ctx.restore();
   }
+
+  // Chain selection ring
+  if (opts.inChain) {
+    const ringStrength = opts.isLast ? 1 : 0.65;
+    ctx.save();
+    roundRectPath(ctx, 1.5, 1.5, TILE - 3, TILE - 3, RADIUS - 1);
+    ctx.strokeStyle = `rgba(255,255,255,${ringStrength})`;
+    ctx.lineWidth = opts.isLast ? 3 : 2;
+    ctx.stroke();
+    ctx.restore();
+  } else if (opts.isValidNext) {
+    const pulse = 0.55 + 0.45 * Math.sin(opts.now / 200);
+    ctx.save();
+    roundRectPath(ctx, 1.5, 1.5, TILE - 3, TILE - 3, RADIUS - 1);
+    ctx.strokeStyle = VALID_NEXT_GLOW;
+    ctx.lineWidth = 2;
+    ctx.globalAlpha = 0.55 + pulse * 0.4;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Value text — auto-fit to tile width using compact-format
+  const label = formatTileValue(value);
+  const fz = fitFontSize(ctx, label, TILE - 16, FONT_DISPLAY);
+  ctx.fillStyle = theme.text;
+  ctx.font = `700 ${fz}px ${FONT_DISPLAY}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.shadowColor = retired ? 'rgba(0,0,0,0.7)' : 'rgba(0,0,0,0.35)';
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetY = 1;
+  ctx.fillText(label, TILE / 2, TILE / 2 + 1);
+  ctx.shadowBlur = 0;
+  ctx.shadowOffsetY = 0;
+
+  ctx.restore();
 }
 
-function darken(hex: string, amount: number): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  const clamp = (v: number): number => Math.max(0, Math.round(v * (1 - amount)));
-  return `rgb(${clamp(r)},${clamp(g)},${clamp(b)})`;
+function drawChainTrail(
+  ctx: CanvasRenderingContext2D,
+  chain: readonly Cell[],
+  now: number,
+): void {
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.globalCompositeOperation = 'lighter';
+
+  // Outer soft trail
+  ctx.strokeStyle = CHAIN_TRAIL_TAIL;
+  ctx.lineWidth = 14;
+  ctx.beginPath();
+  for (let i = 0; i < chain.length; i++) {
+    const cell = chain[i];
+    if (cell === undefined) continue;
+    const { cx, cy } = tileCenter(cell);
+    if (i === 0) ctx.moveTo(cx, cy);
+    else ctx.lineTo(cx, cy);
+  }
+  ctx.stroke();
+
+  // Inner bright core with animated dash
+  const dashOffset = (now / 30) % 24;
+  ctx.strokeStyle = CHAIN_TRAIL_HEAD;
+  ctx.lineWidth = 4;
+  ctx.setLineDash([10, 14]);
+  ctx.lineDashOffset = -dashOffset;
+  ctx.globalAlpha = 0.85;
+  ctx.beginPath();
+  for (let i = 0; i < chain.length; i++) {
+    const cell = chain[i];
+    if (cell === undefined) continue;
+    const { cx, cy } = tileCenter(cell);
+    if (i === 0) ctx.moveTo(cx, cy);
+    else ctx.lineTo(cx, cy);
+  }
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Bright nodes at each chain cell
+  for (let i = 0; i < chain.length; i++) {
+    const cell = chain[i];
+    if (cell === undefined) continue;
+    const { cx, cy } = tileCenter(cell);
+    const r = i === chain.length - 1 ? 5 : 3;
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 4);
+    grad.addColorStop(0, 'rgba(255,255,255,1)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(cx - r * 4, cy - r * 4, r * 8, r * 8);
+  }
+
+  ctx.restore();
 }
 
-// Simple brightness boost without external deps
-function lighten(hex: string, amount: number): string {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  const clamp = (v: number): number => Math.min(255, Math.round(v + (255 - v) * amount));
-  return `rgb(${clamp(r)},${clamp(g)},${clamp(b)})`;
+function drawPreviewBadge(
+  ctx: CanvasRenderingContext2D,
+  cell: Cell,
+  value: TileValue,
+  now: number,
+): void {
+  const x = tileOriginX(cell.col);
+  const y = tileOriginY(cell.row);
+  const theme = tileTheme(value);
+  const text = `→ ${formatTileValue(value)}`;
+  ctx.save();
+  ctx.font = `700 12px ${FONT_DISPLAY}`;
+  const metrics = ctx.measureText(text);
+  const padX = 8;
+  const w = Math.ceil(metrics.width) + padX * 2;
+  const h = 22;
+  const bx = x + TILE - w + 6;
+  const by = y - h / 2;
+  const bob = Math.sin(now / 200) * 1.5;
+
+  // Soft drop shadow
+  ctx.save();
+  ctx.shadowColor = theme.glow;
+  ctx.shadowBlur = 16;
+  roundRectPath(ctx, bx, by + bob, w, h, 11);
+  ctx.fillStyle = '#0a0c1a';
+  ctx.fill();
+  ctx.restore();
+
+  // Border outline using tier glow color
+  roundRectPath(ctx, bx, by + bob, w, h, 11);
+  ctx.strokeStyle = theme.aura;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  ctx.fillStyle = theme.aura;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, bx + w / 2, by + h / 2 + bob + 1);
+  ctx.restore();
+}
+
+// ─── Color utilities ─────────────────────────────────────────────────────
+
+function hexToRgb(hex: string): { r: number; g: number; b: number } {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return { r, g, b };
+}
+
+function hexToRgba(hex: string, a: number): string {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+function mixColor(a: string, b: string, t: number): string {
+  const ca = hexToRgb(a);
+  const cb = hexToRgb(b);
+  const mix = (x: number, y: number): number => Math.round(x + (y - x) * t);
+  return `rgb(${mix(ca.r, cb.r)},${mix(ca.g, cb.g)},${mix(ca.b, cb.b)})`;
 }
