@@ -25,8 +25,10 @@ export function pixelToCell(
   y: number,
   rows: number,
   cols: number,
+  maxDist?: number,
 ): Cell | null {
   if (rows === 0 || cols === 0) return null;
+  const maxDistSq = maxDist !== undefined ? maxDist * maxDist : Infinity;
   let best: Cell | null = null;
   let bestDist = Infinity;
   for (let r = 0; r < rows; r++) {
@@ -40,6 +42,7 @@ export function pixelToCell(
       }
     }
   }
+  if (maxDist !== undefined && bestDist > maxDistSq) return null;
   return best;
 }
 
