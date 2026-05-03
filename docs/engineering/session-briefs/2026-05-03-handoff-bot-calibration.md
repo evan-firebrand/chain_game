@@ -1,7 +1,7 @@
 # Session Brief: Bot Calibration & Open Design Threads
 
 **Date:** 2026-05-03
-**Supersedes (delta only):** [`2026-05-01-handoff-lifecycle-followup.md`](2026-05-01-handoff-lifecycle-followup.md) — the design model, process, and "do NOT" list there are still current. **Read it first if you haven't.** This brief only captures what changed since.
+**Read alongside:** [`2026-05-01-handoff-lifecycle-followup.md`](2026-05-01-handoff-lifecycle-followup.md). That brief documents the **operating context** — the design model (the lifecycle lens), the branch workflow (process), the do-NOT list (constraints). Those aren't deferred work items; they're the frame of reference everything else operates inside. **Read it first if you haven't.** This brief only captures what *work* has happened since 2026-05-01 and what's open next.
 
 ---
 
@@ -121,7 +121,7 @@ npx tsx scripts/studies/death-mechanism.ts --seed 1 --n 3 --max-turns 500 --out 
 ## What this brief does NOT cover
 
 - The UI changes from PRs #30, #31, #32. I don't have context on them. Read those PRs cold.
-- The 2026-05-01 brief's content (design model, branch workflow, Evan-only-writes list, do-NOTs). Read that brief — none of it has been superseded.
+- The operating context documented in the 2026-05-01 brief (design lens, branch workflow, Evan-only-writes list, do-NOTs). That's the frame, not work — it isn't restated here because nothing about it changed and duplicating it would just bloat the docs.
 
 ---
 
