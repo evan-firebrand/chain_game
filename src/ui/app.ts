@@ -17,6 +17,7 @@ import type { InputCallbacks } from './input.js';
 import {
   createHud, updateHud, updateChainPreview, flashBanner, clearGameOver,
   countRetiredTiles, flashConquest,
+  deriveTierStatuses, renderTierBadges, resetTierBadgeCache,
 } from './hud.js';
 import { mountTuningConsole } from '../tuning-console/console.js';
 import { tileTheme } from './theme.js';
@@ -236,6 +237,45 @@ function injectStyles(): void {
     }
     .hud-value--flash { animation: hud-flash 280ms cubic-bezier(.2,.8,.3,1.4); }
     .hud-value--big-flash { animation: hud-flash-big 720ms cubic-bezier(.2,.8,.3,1.4); }
+
+    .tier-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      justify-content: center;
+      align-items: center;
+      width: 100%;
+    }
+    .tier-badges:empty {
+      display: none;
+    }
+    .tier-badge {
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.18em;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(20, 24, 48, 0.55);
+      color: var(--ink-mid);
+      transition: color 220ms ease, border-color 220ms ease, box-shadow 320ms ease, transform 220ms ease;
+      animation: tier-badge-pop 360ms cubic-bezier(.2,.8,.3,1.4);
+    }
+    .tier-badge[data-state="in-progress"] {
+      color: #ffb573;
+      border-color: rgba(255, 181, 115, 0.45);
+      background: rgba(60, 30, 12, 0.45);
+    }
+    .tier-badge[data-state="conquered"] {
+      /* color/borderColor/boxShadow set inline per-tier from tileTheme. */
+      background: rgba(20, 24, 48, 0.7);
+    }
+    @keyframes tier-badge-pop {
+      0%   { transform: scale(0.6); opacity: 0; }
+      60%  { transform: scale(1.12); opacity: 1; }
+      100% { transform: scale(1); opacity: 1; }
+    }
 
     .hud-banner {
       width: 100%;
@@ -581,10 +621,16 @@ function mount(): void {
     prevRetiredCount = retiredCount;
   }
 
+  function refreshTierBadges(state: GameState): void {
+    renderTierBadges(hud, deriveTierStatuses(state.board, conquestedTiers));
+  }
+
   let unsubscribe = session.on(event => {
     handleKernelEvents(event.state, event.kernelEvents);
     updateHud(hud, event.state);
+    refreshTierBadges(event.state);
   });
+  refreshTierBadges(session.getState());
   let detach = attachInput(canvas, session.getState().config.gridRows, session.getState().config.gridCols, makeInputCallbacks());
 
   // Per-turn play recorder. Survives session restarts via attachSession.
@@ -596,6 +642,7 @@ function mount(): void {
     detach();
     effects.clear();
     conquestedTiers.clear();
+    resetTierBadgeCache();
     session = newSession;
     previousBoard = session.getState().board;
     prevRetiredCount = countRetiredTiles(session.getState().board);
@@ -604,7 +651,9 @@ function mount(): void {
     unsubscribe = session.on(event => {
       handleKernelEvents(event.state, event.kernelEvents);
       updateHud(hud, event.state);
+      refreshTierBadges(event.state);
     });
+    refreshTierBadges(session.getState());
     detach = attachInput(canvas, cfg.gridRows, cfg.gridCols, makeInputCallbacks());
     playlog.attachSession(newSession);
   }
