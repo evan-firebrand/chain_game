@@ -87,6 +87,7 @@ export function attachInput(
   }
 
   function onCancel(): void {
+    if (!active) return; // pointercancel can fire after pointerup; ignore if already handled
     active = false;
     chain = [];
     callbacks.onChainCancel();
