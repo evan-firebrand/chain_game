@@ -152,6 +152,8 @@ CI runs a dependency boundary check on every push. Violations are build failures
 
 See `docs/engineering/ARCHITECTURE.md` §Branch Strategy for the full rules. Short version: cut from `develop`, PR back to `develop`, never push directly to `develop` or `main`. Evan promotes `develop → main`.
 
+**Branch naming:** always use `feat/<slug>` or `fix/<slug>` cut from `origin/develop`. **Never work on the auto-generated `claude/<...>` worktree branch** — that is just a scratch worktree; cut a real feature branch from it immediately before doing any work.
+
 **Off-limits branches — do not read or use as context:**
 - `archive/v1` — abandoned prototype, different codebase entirely
 
