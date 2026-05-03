@@ -1,5 +1,5 @@
 import type { Cell } from '../game-session/index.js';
-import { pixelToCell } from './board.js';
+import { pixelToCell, TILE } from './board.js';
 
 export interface InputCallbacks {
   onChainUpdate: (chain: readonly Cell[]) => void;
@@ -24,7 +24,7 @@ export function attachInput(
   let active = false;
   let chain: Cell[] = [];
 
-  function getCell(e: PointerEvent): Cell | null {
+  function getCell(e: PointerEvent, maxDist?: number): Cell | null {
     const rect = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     // canvas.width is in device pixels (W * dpr); rect.width is CSS pixels.
@@ -33,7 +33,7 @@ export function attachInput(
     const scaleY = (canvas.height / rect.height) / dpr;
     const x = (e.clientX - rect.left) * scaleX;
     const y = (e.clientY - rect.top) * scaleY;
-    return pixelToCell(x, y, rows, cols);
+    return pixelToCell(x, y, rows, cols, maxDist);
   }
 
   function onDown(e: PointerEvent): void {
@@ -51,7 +51,10 @@ export function attachInput(
   function onMove(e: PointerEvent): void {
     if (!active) return;
     e.preventDefault();
-    const cell = getCell(e);
+    // When extending, require the pointer to be within half a tile of the cell center.
+    // A fast diagonal swipe can briefly make the wrong adjacent cell the nearest; this
+    // dead-zone around each cell boundary prevents that intermediate cell from being added.
+    const cell = getCell(e, chain.length > 0 ? TILE * 0.5 : undefined);
     if (cell === null) return;
 
     const last = chain[chain.length - 1];
