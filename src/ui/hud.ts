@@ -2,6 +2,12 @@ import type { Board, GameState, TileValue } from '../game-session/index.js';
 import { tileTheme, formatTileValue } from './theme.js';
 
 export type LifecyclePhase = 'free-play' | 'cleanup' | 'conquest';
+export type TierState = 'in-progress' | 'conquered';
+
+export interface TierStatus {
+  readonly value: TileValue;
+  readonly state: TierState;
+}
 
 export interface HudElements {
   root: HTMLElement;
@@ -13,6 +19,7 @@ export interface HudElements {
   chainStat: HTMLElement;
   phase: HTMLElement;
   toolbar: HTMLElement;
+  tierBadges: HTMLElement;
   gameOver: HTMLElement;
   tuningToggle: HTMLButtonElement;
   banner: HTMLElement;
@@ -73,6 +80,17 @@ export function createHud(container: HTMLElement): HudElements {
   `;
   root.appendChild(stats);
 
+  // Tier-conquest progress: a horizontal row of chips, one per tier the
+  // player has touched. Hidden via :empty CSS rule until the first tier is
+  // retired. Lives inside hud-root so it scrolls with the HUD on small
+  // screens.
+  const tierBadges = document.createElement('div');
+  tierBadges.className = 'tier-badges';
+  tierBadges.id = 'tier-badges';
+  tierBadges.setAttribute('role', 'list');
+  tierBadges.setAttribute('aria-label', 'Tier progress');
+  root.appendChild(tierBadges);
+
   container.appendChild(root);
 
   const banner = document.createElement('div');
@@ -105,6 +123,7 @@ export function createHud(container: HTMLElement): HudElements {
     chainStat: stats.querySelector('#hud-chain-stat') as HTMLElement,
     phase: branding.querySelector('#hud-phase') as HTMLElement,
     toolbar: branding.querySelector('.hud-toolbar') as HTMLElement,
+    tierBadges,
     gameOver,
     tuningToggle: branding.querySelector('.hud-tuning-toggle') as HTMLButtonElement,
     banner,
@@ -243,4 +262,80 @@ function flashStat(el: HTMLElement, big = false): void {
   el.classList.remove('hud-value--flash', 'hud-value--big-flash');
   void el.offsetWidth;
   el.classList.add(big ? 'hud-value--big-flash' : 'hud-value--flash');
+}
+
+// ─── Tier-conquest progress ────────────────────────────────────────────────
+
+export function countRetiredTilesByTier(board: Board): ReadonlyMap<TileValue, number> {
+  const counts = new Map<TileValue, number>();
+  for (const row of board) {
+    for (const tile of row) {
+      if (tile.value !== 0 && tile.retired) {
+        counts.set(tile.value, (counts.get(tile.value) ?? 0) + 1);
+      }
+    }
+  }
+  return counts;
+}
+
+/**
+ * Derive per-tier statuses from the current board + the set of already-
+ * conquered tiers. The conquered set is owned by the caller (app.ts)
+ * because PR #32's per-tier conquest detection already maintains it for
+ * confetti + banner triggers; this function reuses that source of truth.
+ *
+ * A tier appears as a badge if it's currently retired OR has been
+ * conquered. Tiers never retired are not shown (no spoilers).
+ */
+export function deriveTierStatuses(
+  board: Board,
+  conquered: ReadonlySet<TileValue>
+): readonly TierStatus[] {
+  const inProgress = new Set<TileValue>();
+  for (const value of countRetiredTilesByTier(board).keys()) {
+    inProgress.add(value);
+  }
+  const all = new Set<TileValue>([...conquered, ...inProgress]);
+  return [...all]
+    .sort((a, b) => a - b)
+    .map(value => ({
+      value,
+      state: conquered.has(value) ? 'conquered' : 'in-progress' as const,
+    }));
+}
+
+let lastBadgeKey = '';
+
+export function renderTierBadges(hud: HudElements, statuses: readonly TierStatus[]): void {
+  // Skip work if nothing changed. N is small, so a string key is cheap.
+  const key = statuses.map(s => `${s.value}:${s.state}`).join('|');
+  if (key === lastBadgeKey) return;
+  lastBadgeKey = key;
+
+  hud.tierBadges.innerHTML = '';
+  for (const { value, state } of statuses) {
+    const badge = document.createElement('span');
+    badge.className = 'tier-badge';
+    badge.dataset.state = state;
+    badge.setAttribute('role', 'listitem');
+    const labelText = state === 'conquered'
+      ? `${formatTileValue(value)} ✓`
+      : formatTileValue(value);
+    badge.textContent = labelText;
+    badge.title = state === 'conquered'
+      ? `Tier ${value} conquered`
+      : `Tier ${value} — clean up retired tiles`;
+    if (state === 'conquered') {
+      const theme = tileTheme(value);
+      badge.style.color = theme.aura;
+      badge.style.borderColor = theme.glow;
+      badge.style.boxShadow = `0 0 14px ${theme.glow}`;
+    }
+    hud.tierBadges.appendChild(badge);
+  }
+}
+
+// Reset the badge cache. Call on new game so the next render forces a paint.
+export function resetTierBadgeCache(): void {
+  lastBadgeKey = '';
 }
