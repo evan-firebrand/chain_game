@@ -16,6 +16,8 @@ import { attachInput } from './input.js';
 import type { InputCallbacks } from './input.js';
 import { createHud, updateHud, updateChainPreview } from './hud.js';
 import { mountTuningConsole } from '../tuning-console/console.js';
+import { PlaylogRecorder } from '../game-session/playlog.js';
+import { mountPlaylogControls } from './playlog-controls.js';
 
 function injectStyles(): void {
   const style = document.createElement('style');
@@ -57,6 +59,17 @@ function injectStyles(): void {
       line-height: 1;
     }
     .hud-tuning-toggle:hover { background: #3a4060; }
+    .hud-playlog-download {
+      background: #2a3050;
+      color: #fff;
+      border: 1px solid #445;
+      border-radius: 6px;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-size: 12px;
+      line-height: 1;
+    }
+    .hud-playlog-download:hover { background: #3a4060; }
     canvas {
       display: block;
       touch-action: none;
@@ -231,6 +244,7 @@ function mount(): void {
 
   let unsubscribe = session.on(() => { render(); });
   let detach = attachInput(canvas, session.getState().config.gridRows, session.getState().config.gridCols, makeInputCallbacks());
+  const playlog = new PlaylogRecorder(session);
 
   function rewireSession(newSession: GameSession): void {
     unsubscribe();
@@ -240,6 +254,7 @@ function mount(): void {
     resizeCanvas(cfg);
     unsubscribe = session.on(() => { render(); });
     detach = attachInput(canvas, cfg.gridRows, cfg.gridCols, makeInputCallbacks());
+    playlog.attachSession(session);
   }
 
   const tuning = mountTuningConsole({
@@ -253,6 +268,8 @@ function mount(): void {
       render();
     },
   });
+
+  mountPlaylogControls(hud.tuningToggle.parentElement ?? app, playlog);
 
   hud.tuningToggle.addEventListener('click', () => {
     if (document.body.hasAttribute('data-console-open')) {
