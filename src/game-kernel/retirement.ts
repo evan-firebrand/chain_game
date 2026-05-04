@@ -66,6 +66,7 @@ export function computeCriticalTiles(board: Board): Board {
   while (changed) {
     changed = false;
     const rows = current.length;
+    /* v8 ignore next 1 - board is always non-empty when this runs */
     const cols = current[0]?.length ?? 0;
 
     const next = current.map((row, r) =>
