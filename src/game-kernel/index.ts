@@ -16,7 +16,7 @@ import type {
 } from './types.js';
 import { applyGravity, setTile, removeTiles, spawnTiles } from './board.js';
 import { getAdjacentCells, validateChainExtension, resolveChain } from './chain.js';
-import { checkRetirement, advanceSpawnPool, markRetiredTiles } from './retirement.js';
+import { checkRetirement, advanceSpawnPool, markRetiredTiles, computeCriticalTiles } from './retirement.js';
 import { forEachTileValueInRange, previousTileValue } from './values.js';
 
 // Re-export public types
@@ -55,6 +55,7 @@ export {
 } from './values.js';
 export { getAdjacentCells, validateChainExtension, resolveChain } from './chain.js';
 export { applyGravity, setTile, removeTiles, spawnTiles } from './board.js';
+export { computeCriticalTiles } from './retirement.js';
 
 // ─── LCG PRNG (duplicated here for initial board fill) ───────────────────
 
@@ -105,7 +106,7 @@ function pickTileValue(
 
 function createEmptyBoard(rows: number, cols: number): Board {
   return Array.from({ length: rows }, () =>
-    Array.from({ length: cols }, () => ({ value: 0 as TileValue, retired: false }))
+    Array.from({ length: cols }, () => ({ value: 0 as TileValue, retired: false, critical: false }))
   ) as Board;
 }
 
@@ -123,7 +124,7 @@ function fillBoard(
       currentPrng = lcgNext(currentPrng);
       const rand = lcgFloat(currentPrng);
       const value = pickTileValue(config, rand);
-      board = setTile(board, { row: r as Row, col: c as Col }, { value, retired: false });
+      board = setTile(board, { row: r as Row, col: c as Col }, { value, retired: false, critical: false });
     }
   }
 
@@ -155,7 +156,7 @@ export function createGame(config: GameConfig): GameState {
     if (attempt >= 100) {
       const firstTile = board[0]?.[0];
       if (firstTile !== undefined && firstTile.value !== 0) {
-        board = setTile(board, { row: 0 as Row, col: 1 as Col }, { value: firstTile.value, retired: false });
+        board = setTile(board, { row: 0 as Row, col: 1 as Col }, { value: firstTile.value, retired: false, critical: false });
       }
       break;
     }
@@ -329,7 +330,7 @@ export function applyAction(state: GameState, action: Action): GameState {
 
       // Remove chain tiles, place result at last cell
       let board = removeTiles(state.board, chain);
-      board = setTile(board, lastCell, { value: resultValue, retired: false });
+      board = setTile(board, lastCell, { value: resultValue, retired: false, critical: false });
 
       // Apply gravity
       board = applyGravity(board);
@@ -394,6 +395,9 @@ export function applyAction(state: GameState, action: Action): GameState {
         };
         newEvents.push(tilesSpawnedEvent);
       }
+
+      // Compute critical state after all board mutations for this turn are complete
+      board = computeCriticalTiles(board);
 
       // Check loss condition
       const legalStart = hasLegalChainStart(board);
