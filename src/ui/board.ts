@@ -397,11 +397,13 @@ function drawPreviewBadge(
 // ─── Color utilities ─────────────────────────────────────────────────────
 
 function hexToRgb(hex: string): { r: number; g: number; b: number } {
-  const h = hex.replace('#', '');
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  return { r, g, b };
+  if (!hex.startsWith('#')) return { r: 128, g: 128, b: 128 }; // non-hex fallback (stale cache guard)
+  const h = hex.slice(1);
+  return {
+    r: parseInt(h.slice(0, 2), 16),
+    g: parseInt(h.slice(2, 4), 16),
+    b: parseInt(h.slice(4, 6), 16),
+  };
 }
 
 function hexToRgba(hex: string, a: number): string {
