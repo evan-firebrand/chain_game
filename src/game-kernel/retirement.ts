@@ -100,7 +100,9 @@ function canReachPartner(
     for (let tr = 0; tr < rows; tr++) {
       if (dc === 0 && tr === row) continue;
       const candidate = board[tr]?.[tc];
-      if (candidate === undefined || candidate.value !== value || candidate.critical) continue;
+      /* v8 ignore next 1 - tr and tc are always in-bounds on a complete board */
+      if (candidate === undefined) continue;
+      if (candidate.value !== value || candidate.critical) continue;
 
       if (dc === 0) {
         // Same column: blocked if any critical tile sits between row and tr
@@ -108,7 +110,10 @@ function canReachPartner(
         const maxR = Math.max(row, tr);
         let blocked = false;
         for (let br = minR + 1; br < maxR; br++) {
-          if (board[br]?.[tc]?.critical === true) { blocked = true; break; }
+          const between = board[br]?.[tc];
+          /* v8 ignore next 1 - br and tc are always in-bounds */
+          if (between === undefined) continue;
+          if (between.critical) { blocked = true; break; }
         }
         if (!blocked) return true;
       } else {
