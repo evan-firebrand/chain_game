@@ -692,8 +692,19 @@ function mount(): void {
 
   updateHud(hud, session.getState());
 
+  // Branch badge — bottom-left, build-time injected
+  const badge = Object.assign(document.createElement('div'), { textContent: __GIT_BRANCH__ });
+  Object.assign(badge.style, {
+    position: 'fixed', bottom: '8px', left: '10px',
+    font: '10px/1 "DM Mono", monospace', color: 'rgba(180,190,255,0.35)',
+    pointerEvents: 'none', zIndex: '9999', userSelect: 'none',
+  });
+  document.body.appendChild(badge);
+
   // Cleanup on unload (defensive)
   window.addEventListener('beforeunload', () => { cancelAnimationFrame(rafId); });
 }
+
+declare const __GIT_BRANCH__: string;
 
 mount();
