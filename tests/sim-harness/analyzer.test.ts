@@ -1,146 +1,165 @@
-import { describe, it, expect } from 'vitest';
-import { DEFAULT_CONFIG } from '../../src/game-kernel/index.js';
-import { analyze } from '../../src/sim-harness/analyzer.js';
-import type { GameConfig } from '../../src/game-kernel/index.js';
-import type { GameResult } from '../../src/sim-harness/types.js';
+import { describe, expect, it } from 'vitest';
+import type { GameRunResult } from '../../src/sim-harness/index.js';
+import { analyzeGames } from '../../src/sim-harness/index.js';
 
-const CONFIG: GameConfig = { ...DEFAULT_CONFIG, prngSeed: 42 };
+const BASE_GAME: Omit<GameRunResult, 'runIndex' | 'seed' | 'finalTurn' | 'deathCause' | 'maxTileReached' | 'turns'> = {
+  strategyId: 'greedy',
+  finalPhase: 'game-over',
+  activeSpawnPoolAtDeath: [4, 512],
+  events: [],
+};
 
-function mkResult(overrides: {
-  turns: number;
-  maxTile: number;
-  finalPhase?: 'playing' | 'game-over';
-  deathCause?: 'no-legal-chain-start' | null;
-  chainLengthHistogram?: number[];
-  chainResultHistogram?: number[];
-  strategySeed?: number;
-}): GameResult {
-  return {
-    inputs: {
-      config: CONFIG,
-      strategy: 'random',
-      strategySeed: overrides.strategySeed ?? 0,
-    },
-    outputs: {
-      turns: overrides.turns,
-      maxTile: overrides.maxTile,
-      finalPhase: overrides.finalPhase ?? 'game-over',
-      deathCause:
-        overrides.deathCause === undefined
-          ? 'no-legal-chain-start'
-          : overrides.deathCause,
-      chainLengthHistogram: overrides.chainLengthHistogram ?? [0, 0, 1],
-      chainResultHistogram: overrides.chainResultHistogram ?? [0, 1, 0],
-    },
-  };
-}
-
-describe('analyze — aggregation', () => {
-  it('throws if results.length !== options.n', () => {
-    const results = [mkResult({ turns: 10, maxTile: 8 })];
-    expect(() =>
-      analyze(results, { config: CONFIG, strategy: 'random', n: 2, startStrategySeed: 0 }),
-    ).toThrow();
-  });
-
-  it('completedGames counts only game-over results', () => {
-    const results = [
-      mkResult({ turns: 100, maxTile: 8, finalPhase: 'game-over' }),
-      mkResult({ turns: 100, maxTile: 8, finalPhase: 'playing', deathCause: null }),
-      mkResult({ turns: 100, maxTile: 8, finalPhase: 'game-over' }),
+describe('analyzeGames', () => {
+  it('computes aggregate distributions and percentiles', () => {
+    const games: GameRunResult[] = [
+      {
+        ...BASE_GAME,
+        runIndex: 0,
+        seed: 1,
+        finalTurn: 10,
+        deathCause: 'no-legal-chain-start',
+        maxTileReached: 512,
+        turns: [
+          {
+            turn: 1,
+            chain: [{ row: 0, col: 0 }, { row: 0, col: 1 }],
+            chainLength: 2,
+            resultValue: 4,
+            legalChainStartsBefore: 8,
+            legalChainStartsAfter: 7,
+            spawnPoolBefore: [2, 256],
+            spawnPoolAfter: [2, 256],
+            retiredTileCountBefore: 0,
+            retiredTileCountAfter: 0,
+            isolatedRetiredTileCountBefore: 0,
+            isolatedRetiredTileCountAfter: 0,
+            events: [],
+          },
+        ],
+      },
+      {
+        ...BASE_GAME,
+        runIndex: 1,
+        seed: 2,
+        finalTurn: 20,
+        deathCause: 'max-turns',
+        maxTileReached: 1024,
+        turns: [],
+      },
     ];
-    const agg = analyze(results, { config: CONFIG, strategy: 'random', n: 3, startStrategySeed: 0 });
-    expect(agg.outputs.completedGames).toBe(2);
+
+    const output = analyzeGames(games);
+    expect(output.gameLength.median).toBe(10);
+    expect(output.gameLength.p90).toBe(10);
+    expect(output.maxTileDistribution[512]).toBe(1);
+    expect(output.maxTileDistribution[1024]).toBe(1);
+    expect(output.chainLengthDistribution[2]).toBe(1);
+    expect(output.chainLengthBuckets.short2To4).toBe(1);
+    expect(output.resultValueDistribution[4]).toBe(1);
+    expect(output.deathCauseDistribution['no-legal-chain-start']).toBe(1);
+    expect(output.deathCauseDistribution['max-turns']).toBe(1);
+    expect(output.choiceRichness.legalChainStartsBefore.median).toBe(8);
+    expect(output.choiceRichness.forcedTurnBuckets.fourPlusStarts).toBe(1);
   });
 
-  it('mean/median game length only consider completed games', () => {
-    const results = [
-      mkResult({ turns: 10, maxTile: 4, finalPhase: 'game-over' }),
-      mkResult({ turns: 20, maxTile: 4, finalPhase: 'game-over' }),
-      mkResult({ turns: 99999, maxTile: 4, finalPhase: 'playing', deathCause: null }),
+  it('extracts retirement trigger metrics including cascade game-over cases', () => {
+    const games: GameRunResult[] = [
+      {
+        ...BASE_GAME,
+        runIndex: 0,
+        seed: 1,
+        finalTurn: 1,
+        deathCause: 'no-legal-chain-start',
+        maxTileReached: 2048,
+        turns: [
+          {
+            turn: 1,
+            chain: [{ row: 0, col: 0 }, { row: 0, col: 1 }, { row: 0, col: 2 }],
+            chainLength: 3,
+            resultValue: 2048,
+            legalChainStartsBefore: 5,
+            legalChainStartsAfter: 0,
+            spawnPoolBefore: [2, 256],
+            spawnPoolAfter: [16, 2048],
+            retiredTileCountBefore: 0,
+            retiredTileCountAfter: 3,
+            isolatedRetiredTileCountBefore: 0,
+            isolatedRetiredTileCountAfter: 2,
+            events: [
+              {
+                kind: 'retirement-fired',
+                retiredTier: 2,
+                newSpawnPoolMin: 4,
+                newSpawnPoolMax: 512,
+              },
+              {
+                kind: 'retirement-fired',
+                retiredTier: 4,
+                newSpawnPoolMin: 8,
+                newSpawnPoolMax: 1024,
+              },
+              {
+                kind: 'game-over',
+                cause: 'no-legal-chain-start',
+                finalMaxTile: 2048,
+                totalTurns: 1,
+              },
+            ],
+          },
+        ],
+      },
     ];
-    const agg = analyze(results, { config: CONFIG, strategy: 'random', n: 3, startStrategySeed: 0 });
-    expect(agg.outputs.meanGameLength).toBe(15);
-    expect(agg.outputs.medianGameLength).toBe(15);
+
+    const retirement = analyzeGames(games).retirement;
+    expect(retirement.firstRetirementTurn).toBe(1);
+    expect(retirement.retirementEventsPerGame).toEqual([2]);
+    expect(retirement.cascadeRetirementsPerTransition).toEqual([2]);
+    expect(retirement.cascadesFollowedByImmediateGameOver).toBe(1);
+    expect(retirement.triggers).toHaveLength(2);
+    expect(retirement.triggers[0]?.chainLength).toBe(3);
+    expect(retirement.triggers[0]?.resultValue).toBe(2048);
+    expect(retirement.legalChainStartDeltaAfterRetirement).toEqual([-5]);
+    expect(retirement.turnsSurvivedAfterFirstRetirement).toEqual([0]);
   });
 
-  it('mean / median maxTile consider all games', () => {
-    const results = [
-      mkResult({ turns: 10, maxTile: 4 }),
-      mkResult({ turns: 10, maxTile: 8 }),
-      mkResult({ turns: 10, maxTile: 16 }),
-    ];
-    const agg = analyze(results, { config: CONFIG, strategy: 'random', n: 3, startStrategySeed: 0 });
-    expect(agg.outputs.meanMaxTile).toBeCloseTo((4 + 8 + 16) / 3, 6);
-    expect(agg.outputs.medianMaxTile).toBe(8);
-  });
+  it('aggregates strategy mode and intent diagnostics', () => {
+    const output = analyzeGames([
+      {
+        ...BASE_GAME,
+        runIndex: 0,
+        seed: 1,
+        finalTurn: 1,
+        deathCause: 'max-turns',
+        maxTileReached: 4,
+        turns: [
+          {
+            turn: 1,
+            chain: [{ row: 0, col: 0 }, { row: 0, col: 1 }],
+            chainLength: 2,
+            resultValue: 4,
+            legalChainStartsBefore: 1,
+            legalChainStartsAfter: 2,
+            spawnPoolBefore: [2, 256],
+            spawnPoolAfter: [2, 256],
+            retiredTileCountBefore: 0,
+            retiredTileCountAfter: 0,
+            isolatedRetiredTileCountBefore: 0,
+            isolatedRetiredTileCountAfter: 0,
+            strategyDiagnostics: {
+              mode: 'cleanup',
+              reasonCode: 'test',
+              intent: 'cleanup',
+              candidateChainLength: 2,
+              projectedResultValue: 4,
+            },
+            events: [],
+          },
+        ],
+      },
+    ]);
 
-  it('maxTileDistribution counts each maxTile value', () => {
-    const results = [
-      mkResult({ turns: 10, maxTile: 4 }),
-      mkResult({ turns: 10, maxTile: 4 }),
-      mkResult({ turns: 10, maxTile: 8 }),
-    ];
-    const agg = analyze(results, { config: CONFIG, strategy: 'random', n: 3, startStrategySeed: 0 });
-    expect(agg.outputs.maxTileDistribution['4']).toBe(2);
-    expect(agg.outputs.maxTileDistribution['8']).toBe(1);
-  });
-
-  it('chainLengthDistribution sums per-game histograms', () => {
-    const results = [
-      mkResult({ turns: 5, maxTile: 4, chainLengthHistogram: [0, 0, 3, 1] }),
-      mkResult({ turns: 4, maxTile: 4, chainLengthHistogram: [0, 0, 2, 0, 1] }),
-    ];
-    const agg = analyze(results, { config: CONFIG, strategy: 'random', n: 2, startStrategySeed: 0 });
-    expect(agg.outputs.chainLengthDistribution).toEqual([0, 0, 5, 1, 1]);
-  });
-
-  it('chainResultDistribution sums per-game histograms', () => {
-    const results = [
-      mkResult({ turns: 3, maxTile: 8, chainResultHistogram: [0, 1, 1, 0] }),
-      mkResult({ turns: 2, maxTile: 8, chainResultHistogram: [0, 0, 1, 0] }),
-    ];
-    const agg = analyze(results, { config: CONFIG, strategy: 'random', n: 2, startStrategySeed: 0 });
-    expect(agg.outputs.chainResultDistribution.slice(0, 4)).toEqual([0, 1, 2, 0]);
-  });
-
-  it('deathCauseDistribution counts each cause; "none" for maxTurns-capped', () => {
-    const results = [
-      mkResult({ turns: 100, maxTile: 8, finalPhase: 'game-over', deathCause: 'no-legal-chain-start' }),
-      mkResult({ turns: 100, maxTile: 8, finalPhase: 'game-over', deathCause: 'no-legal-chain-start' }),
-      mkResult({ turns: 99999, maxTile: 8, finalPhase: 'playing', deathCause: null }),
-    ];
-    const agg = analyze(results, { config: CONFIG, strategy: 'random', n: 3, startStrategySeed: 0 });
-    expect(agg.outputs.deathCauseDistribution['no-legal-chain-start']).toBe(2);
-    expect(agg.outputs.deathCauseDistribution.none).toBe(1);
-  });
-});
-
-describe('analyze — percentile correctness', () => {
-  it('p10/p50/p90 match known small dataset', () => {
-    // 11 games with turns 1..11 → median=6, p10≈2, p90≈10
-    const results = Array.from({ length: 11 }, (_, i) =>
-      mkResult({ turns: i + 1, maxTile: 4 }),
-    );
-    const agg = analyze(results, { config: CONFIG, strategy: 'random', n: 11, startStrategySeed: 0 });
-    expect(agg.outputs.medianGameLength).toBe(6);
-    expect(agg.outputs.p10GameLength).toBeCloseTo(2, 6);
-    expect(agg.outputs.p90GameLength).toBeCloseTo(10, 6);
-  });
-});
-
-describe('analyze — passthrough of inputs', () => {
-  it('inputs preserved verbatim', () => {
-    const results = [mkResult({ turns: 10, maxTile: 8 })];
-    const agg = analyze(results, {
-      config: CONFIG,
-      strategy: 'greedy',
-      n: 1,
-      startStrategySeed: 999,
-    });
-    expect(agg.inputs.config).toBe(CONFIG);
-    expect(agg.inputs.strategy).toBe('greedy');
-    expect(agg.inputs.n).toBe(1);
-    expect(agg.inputs.startStrategySeed).toBe(999);
+    expect(output.choiceRichness.forcedTurnBuckets.oneStart).toBe(1);
+    expect(output.strategyBehavior.modeDistribution.cleanup).toBe(1);
+    expect(output.strategyBehavior.intentDistribution.cleanup).toBe(1);
   });
 });

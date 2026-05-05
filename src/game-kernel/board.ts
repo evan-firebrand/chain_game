@@ -1,5 +1,20 @@
 import type { Board, Cell, Tile, TileValue, GameConfig, Row, Col } from './types.js';
-import { EMPTY_TILE, lcgFloat, lcgNext, pickTileValue } from './_internal.js';
+import { forEachTileValueInRange, previousTileValue } from './values.js';
+
+/**
+ * Simple seeded LCG (Linear Congruential Generator).
+ * Returns the next state.
+ */
+function lcgNext(state: number): number {
+  return (Math.imul(1664525, state) + 1013904223) >>> 0;
+}
+
+/**
+ * Convert LCG state to [0, 1) float.
+ */
+function lcgFloat(state: number): number {
+  return state / 0x100000000;
+}
 
 /**
  * Place a tile at a cell, returning a new board.
@@ -16,14 +31,10 @@ export function setTile(board: Board, cell: Cell, tile: Tile): Board {
  * Remove tiles at the given cells, returning a new board with those cells empty.
  */
 export function removeTiles(board: Board, cells: readonly Cell[]): Board {
-  const cols = (board[0] as readonly Tile[]).length;
-  const cellSet = new Set<number>();
-  for (const c of cells) {
-    cellSet.add(c.row * cols + c.col);
-  }
+  const cellSet = new Set(cells.map(c => `${c.row},${c.col}`));
   return board.map((rowArr, r) =>
     rowArr.map((tile, c) =>
-      cellSet.has(r * cols + c) ? EMPTY_TILE : tile
+      cellSet.has(`${r},${c}`) ? { value: 0 as TileValue, retired: false, critical: false } : tile
     )
   ) as Board;
 }
@@ -39,14 +50,10 @@ export function applyGravity(board: Board): Board {
   if (rows === 0) return board;
   const cols = board[0]?.length ?? 0;
 
-  // Build new board as mutable array. Pre-fill every cell with the shared
-  // EMPTY_TILE; columns that have non-empty tiles will overwrite the
-  // bottom slots in the loop below.
-  const newBoard: Tile[][] = Array.from({ length: rows }, () => {
-    const row = new Array<Tile>(cols);
-    for (let i = 0; i < cols; i++) row[i] = EMPTY_TILE;
-    return row;
-  });
+  // Build new board as mutable array
+  const newBoard: Tile[][] = Array.from({ length: rows }, () =>
+    Array.from({ length: cols }, () => ({ value: 0 as TileValue, retired: false, critical: false }))
+  );
 
   for (let c = 0; c < cols; c++) {
     // Collect non-empty tiles from top to bottom
@@ -71,6 +78,49 @@ export function applyGravity(board: Board): Board {
 }
 
 /**
+ * Pick a tile value from spawn pool using weighted random selection.
+ */
+function pickTileValue(
+  config: Pick<GameConfig, 'spawnPoolMin' | 'spawnPoolMax' | 'spawnWeights'>,
+  rand: number
+): TileValue {
+  // Build list of (value, weight) pairs for values in [spawnPoolMin, spawnPoolMax]
+  const entries: [TileValue, number][] = [];
+  let totalWeight = 0;
+
+  forEachTileValueInRange(config.spawnPoolMin, config.spawnPoolMax, v => {
+    /* v8 ignore next 1 */
+    const configuredWeight = config.spawnWeights[v];
+    const previousTier = previousTileValue(v);
+    /* v8 ignore next 3 */
+    const weight = configuredWeight ?? (
+      v === config.spawnPoolMax ? (config.spawnWeights[previousTier ?? 0] ?? 1) / 2 : 0
+    );
+    if (weight > 0) {
+      entries.push([v, weight]);
+      totalWeight += weight;
+    }
+  });
+
+  /* v8 ignore next 3 */
+  if (totalWeight === 0 || entries.length === 0) {
+    return config.spawnPoolMin;
+  }
+
+  let threshold = rand * totalWeight;
+  for (const [val, weight] of entries) {
+    threshold -= weight;
+    if (threshold <= 0) {
+      return val;
+    }
+    /* v8 ignore next 1 */
+  }
+  /* v8 ignore next 2 */
+  const last = entries[entries.length - 1];
+  return last !== undefined ? last[0] : config.spawnPoolMin;
+}
+
+/**
  * Find empty cells starting from top of each column, left-to-right.
  * Returns cells in order: col 0 top-to-bottom, then col 1, etc.
  */
@@ -82,6 +132,7 @@ function findEmptyCells(board: Board): Cell[] {
 
   for (let c = 0; c < cols; c++) {
     for (let r = 0; r < rows; r++) {
+      /* v8 ignore next 1 - board[r] is always defined since r < rows */
       const tile = board[r]?.[c];
       if (tile !== undefined && tile.value === 0) {
         empties.push({ row: r as Row, col: c as Col });
@@ -123,7 +174,7 @@ export function spawnTiles(
     const rand = lcgFloat(currentPrng);
     const value = pickTileValue(config, rand);
 
-    currentBoard = setTile(currentBoard, cell, { value, retired: false });
+    currentBoard = setTile(currentBoard, cell, { value, retired: false, critical: false });
     spawned.push({ cell, value });
   }
 

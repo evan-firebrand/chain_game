@@ -1,7 +1,7 @@
 // ─── Value types ───────────────────────────────────────────────────────────
 
-/** Powers of 2 on the board. 0 = empty cell. */
-export type TileValue = 0 | 2 | 4 | 8 | 16 | 32 | 64 | 128 | 256 | 512 | 1024 | 2048 | 4096 | 8192;
+/** Powers of 2 on the board. 0 = empty cell. Runtime helpers validate playable values. */
+export type TileValue = number;
 
 export type Row = 0 | 1 | 2 | 3 | 4 | 5 | 6;      // 0 = top
 export type Col = 0 | 1 | 2 | 3 | 4 | 5;           // 0 = left
@@ -17,6 +17,8 @@ export interface Tile {
   readonly value: TileValue;
   /** True if this tile's tier has retired from the spawn pool. */
   readonly retired: boolean;
+  /** True if this retired tile can never be cleared — no reachable matching partner exists. */
+  readonly critical: boolean;
 }
 
 // ─── Board ─────────────────────────────────────────────────────────────────
@@ -40,16 +42,6 @@ export interface GameConfig {
   readonly spawnWeights: Readonly<Partial<Record<TileValue, number>>>;
   /** Seeded PRNG state. All randomness flows through this. */
   readonly prngSeed: number;
-  /**
-   * If `false`, the kernel skips the cumulative `state.events` log — every
-   * commit-chain still populates `state.lastEvents` with the per-turn delta,
-   * but `state.events` always points to a shared frozen empty array. This
-   * removes the O(T²) spread that dominates long-game and sweep workloads.
-   *
-   * Defaults to `true` (cumulative log, matches v1 contract). Sim-harness
-   * sets this to `false` per the perf plan.
-   */
-  readonly recordEvents?: boolean;
 }
 
 export const DEFAULT_CONFIG: GameConfig = {
@@ -80,14 +72,6 @@ export interface GameState {
   readonly prngState: number;
   /** Accumulated event log for this game (used by sim harness). */
   readonly events: readonly GameEvent[];
-  /**
-   * Events produced by the *most recent* action only. Always populated;
-   * empty array on the result of `createGame`. Consumers that only need
-   * the per-turn delta (e.g. `game-session`) should read this rather
-   * than slicing `events` — that pattern forces `events` to remain
-   * cumulative and causes O(T²) growth in long games.
-   */
-  readonly lastEvents: readonly GameEvent[];
 }
 
 // ─── Actions ───────────────────────────────────────────────────────────────

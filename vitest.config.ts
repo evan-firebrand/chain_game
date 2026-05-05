@@ -8,12 +8,11 @@ export default defineConfig({
       include: ['src/**/*.ts'],
       exclude: [
         'src/**/*.d.ts',
-        // retirement.ts is a Phase 4 stub — excluded until Phase 4 gate
-        'src/game-kernel/retirement.ts',
         // ui/ runs in the browser — unit coverage not enforced (ARCHITECTURE.md)
         'src/ui/**',
-        // game-session tests are a Phase 3 follow-up
-        'src/game-session/**',
+        // tuning-console DOM modules — no jsdom configured; covered by Evan UAT
+        'src/tuning-console/console.ts',
+        'src/tuning-console/controls.ts',
       ],
       thresholds: {
         lines: 80,

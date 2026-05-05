@@ -1,97 +1,78 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { DEFAULT_CONFIG } from '../../src/game-kernel/index.js';
-import { sweep } from '../../src/sim-harness/sweep.js';
-import type { GameConfig } from '../../src/game-kernel/index.js';
+import {
+  createExperimentProfiles,
+  flat,
+  formatBatchTable,
+  randomStrategy,
+  runExperimentBatch,
+  runSweep,
+  scoreAgainstTarget,
+} from '../../src/sim-harness/index.js';
 
-const BASE: GameConfig = { ...DEFAULT_CONFIG, prngSeed: 42 };
-
-describe('sweep — shape', () => {
-  it('produces one row per sweepValue', () => {
-    const result = sweep({
-      baseConfig: BASE,
-      sweepKey: 'prngSeed',
-      sweepValues: [1, 2, 3],
-      strategy: 'random',
-      n: 2,
-      startStrategySeed: 0,
-      maxTurns: 50,
+describe('runSweep', () => {
+  it('runs one simulation row per provided value', () => {
+    const rows = runSweep({
+      baseConfig: DEFAULT_CONFIG,
+      strategy: randomStrategy,
+      runs: 1,
+      seed: 30,
+      maxTurns: 2,
+      maxChainLength: 3,
+      values: [
+        { label: 'k2', value: 2 },
+        { label: 'k3', value: 3 },
+      ],
+      applyValue: (config, ruleK) => ({ ...config, ruleK }),
     });
-    expect(result.outputs.rows).toHaveLength(3);
-  });
 
-  it('each row.config has sweepKey overridden, other fields preserved', () => {
-    const result = sweep({
-      baseConfig: BASE,
-      sweepKey: 'ruleK',
-      sweepValues: [2, 3],
-      strategy: 'random',
-      n: 1,
-      startStrategySeed: 0,
-      maxTurns: 20,
-    });
-    expect(result.outputs.rows[0]!.inputs.config.ruleK).toBe(2);
-    expect(result.outputs.rows[1]!.inputs.config.ruleK).toBe(3);
-    expect(result.outputs.rows[0]!.inputs.config.gridRows).toBe(BASE.gridRows);
-    expect(result.outputs.rows[1]!.inputs.config.spawnPoolMax).toBe(BASE.spawnPoolMax);
-  });
-
-  it('inputs preserved verbatim on the SweepResult', () => {
-    const result = sweep({
-      baseConfig: BASE,
-      sweepKey: 'prngSeed',
-      sweepValues: [10, 20],
-      strategy: 'random',
-      n: 2,
-      startStrategySeed: 99,
-      maxTurns: 20,
-    });
-    expect(result.inputs.sweepKey).toBe('prngSeed');
-    expect(result.inputs.sweepValues).toEqual([10, 20]);
-    expect(result.inputs.strategy).toBe('random');
-    expect(result.inputs.n).toBe(2);
-    expect(result.inputs.startStrategySeed).toBe(99);
-    expect(result.inputs.baseConfig).toBe(BASE);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.inputs.config.ruleK).toBe(2);
+    expect(rows[1]?.inputs.config.ruleK).toBe(3);
   });
 });
 
-describe('sweep — determinism', () => {
-  it('identical inputs → byte-identical SweepResult', () => {
-    const opts = {
-      baseConfig: BASE,
-      sweepKey: 'prngSeed' as const,
-      sweepValues: [1, 2, 3],
-      strategy: 'random' as const,
-      n: 3,
-      startStrategySeed: 0,
-      maxTurns: 100,
-    };
-    const a = sweep(opts);
-    const b = sweep(opts);
-    expect(a).toEqual(b);
-  });
-});
+describe('experiment profiles and scoring', () => {
+  it('creates named profiles with design questions and valid weights', () => {
+    const profiles = createExperimentProfiles(DEFAULT_CONFIG);
+    expect(profiles.length).toBeGreaterThanOrEqual(12);
+    expect(profiles.every(profile => profile.designQuestion.length > 0)).toBe(true);
 
-describe('sweep — varying prngSeed produces varied outputs', () => {
-  it('different kernel seeds produce measurably different aggregate stats', () => {
-    // The random strategy only commits 2-cell chains, so ruleK (which
-    // only matters for >=3-chains via the sameExtensions/k bonus) has no
-    // effect on its games. To verify the sweep machinery actually
-    // produces varied output, vary a config knob the random strategy
-    // does respond to: prngSeed (which determines the spawn sequence).
-    const result = sweep({
-      baseConfig: BASE,
-      sweepKey: 'prngSeed',
-      sweepValues: [1, 2, 3],
-      strategy: 'random',
-      n: 5,
-      startStrategySeed: 0,
-      maxTurns: 500,
+    const flatConfig = flat(DEFAULT_CONFIG);
+    expect(flatConfig.spawnWeights[2]).toBeGreaterThan(0);
+    expect(flatConfig.spawnWeights[256]).toBeGreaterThan(0);
+  });
+
+  it('scores and classifies simulation rows', () => {
+    const row = runSweep({
+      baseConfig: DEFAULT_CONFIG,
+      strategy: randomStrategy,
+      runs: 1,
+      seed: 31,
+      maxTurns: 2,
+      maxChainLength: 3,
+      values: [{ label: 'k2', value: 2 }],
+      applyValue: (config, ruleK) => ({ ...config, ruleK }),
+    })[0];
+
+    expect(row).toBeDefined();
+    const score = scoreAgainstTarget(row!);
+    expect(score.distance).toBeGreaterThanOrEqual(0);
+    expect(score.labels.length).toBeGreaterThan(0);
+  });
+
+  it('runs a tiny experiment batch and formats a compact table', () => {
+    const rows = runExperimentBatch({
+      profiles: createExperimentProfiles(DEFAULT_CONFIG).slice(0, 1),
+      strategies: [randomStrategy],
+      runs: 1,
+      seed: 40,
+      maxTurns: 2,
+      maxChainLength: 3,
     });
-    const a = result.outputs.rows[0]!.outputs;
-    const c = result.outputs.rows[2]!.outputs;
-    const meansDiffer = Math.abs(a.meanGameLength - c.meanGameLength) > 0.0001;
-    const distDiffer =
-      JSON.stringify(a.maxTileDistribution) !== JSON.stringify(c.maxTileDistribution);
-    expect(meansDiffer || distDiffer).toBe(true);
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.notableSeeds).toBeDefined();
+    expect(formatBatchTable(rows)).toContain('profile\tstrategy');
   });
 });

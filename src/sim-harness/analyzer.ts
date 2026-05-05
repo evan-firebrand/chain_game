@@ -1,126 +1,210 @@
 import type {
-  AggregateResult,
-  GameResult,
-  StrategyName,
+  ChainLengthBucketMetrics,
+  ChoiceRichnessMetrics,
+  GameRunResult,
+  RetirementMetrics,
+  RetirementTriggerSummary,
+  SimulationOutputs,
+  StrategyBehaviorMetrics,
 } from './types.js';
-import type { GameConfig } from '../game-kernel/index.js';
 
-// ─── analyze ─────────────────────────────────────────────────────────────────
-
-export interface AnalyzeOptions {
-  readonly config: GameConfig;
-  readonly strategy: StrategyName;
-  readonly n: number;
-  readonly startStrategySeed: number;
+function increment(distribution: Record<number, number>, key: number): void {
+  distribution[key] = (distribution[key] ?? 0) + 1;
 }
 
-/**
- * Aggregate per-game results into a single AggregateResult. Shape matches
- * SIM_HARNESS_SCHEMA.md exactly; the runner emits per-game GameResults
- * and the analyzer is the only path that produces AggregateResults.
- *
- * Throws if `results.length !== options.n` — that would be a runner bug
- * and silent miscount would corrupt downstream sweep math.
- */
-export function analyze(
-  results: readonly GameResult[],
-  options: AnalyzeOptions,
-): AggregateResult {
-  if (results.length !== options.n) {
-    throw new Error(
-      `analyze: results.length=${results.length} but options.n=${options.n}`,
-    );
-  }
+function percentile(values: readonly number[], p: number): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.floor((sorted.length - 1) * p)));
+  return sorted[index] ?? 0;
+}
 
-  const completed: GameResult[] = [];
-  const allLengths: number[] = [];
-  const allMaxTiles: number[] = [];
-  const completedLengths: number[] = [];
-  const maxTileDistribution: Record<string, number> = {};
-  const deathCauseDistribution: Record<string, number> = {};
+function analyzeRetirement(games: readonly GameRunResult[]): RetirementMetrics {
+  const retirementTurns: number[] = [];
+  const retirementEventsPerGame: number[] = [];
+  const cascadeRetirementsPerTransition: number[] = [];
+  const activeSpawnPoolAtDeath: GameRunResult['activeSpawnPoolAtDeath'][] = [];
+  const retiredTileCountOverTime: number[] = [];
+  const isolatedRetiredTileCountOverTime: number[] = [];
+  const triggers: RetirementTriggerSummary[] = [];
+  const legalChainStartDeltaAfterRetirement: number[] = [];
+  const turnsSurvivedAfterFirstRetirement: number[] = [];
+  const turnsSurvivedAfterSecondRetirement: number[] = [];
+  let cascadesFollowedByImmediateGameOver = 0;
 
-  // Sum dense histograms across games — width matches whatever the runner
-  // produced (currently 64 / 16 from runner.ts constants).
-  let chainLengthLen = 0;
-  let chainResultLen = 0;
-  for (const r of results) {
-    if (r.outputs.chainLengthHistogram.length > chainLengthLen) {
-      chainLengthLen = r.outputs.chainLengthHistogram.length;
+  for (const game of games) {
+    let eventsThisGame = 0;
+    const retirementEventTurns: number[] = [];
+    activeSpawnPoolAtDeath.push(game.activeSpawnPoolAtDeath);
+
+    for (const turn of game.turns) {
+      retiredTileCountOverTime.push(turn.retiredTileCountAfter);
+      isolatedRetiredTileCountOverTime.push(turn.isolatedRetiredTileCountAfter);
+
+      const retirementEvents = turn.events.filter(event => event.kind === 'retirement-fired');
+      if (retirementEvents.length === 0) continue;
+
+      const followedByGameOver = turn.events.some(event => event.kind === 'game-over');
+      eventsThisGame += retirementEvents.length;
+      retirementTurns.push(turn.turn);
+      legalChainStartDeltaAfterRetirement.push(turn.legalChainStartsAfter - turn.legalChainStartsBefore);
+      cascadeRetirementsPerTransition.push(retirementEvents.length);
+      if (retirementEvents.length > 1 && followedByGameOver) {
+        cascadesFollowedByImmediateGameOver++;
+      }
+
+      for (const event of retirementEvents) {
+        retirementEventTurns.push(turn.turn);
+        triggers.push({
+          turn: turn.turn,
+          retiredTier: event.retiredTier,
+          newSpawnPoolMin: event.newSpawnPoolMin,
+          newSpawnPoolMax: event.newSpawnPoolMax,
+          cascadeCountThisTurn: retirementEvents.length,
+          followedByImmediateGameOver: followedByGameOver,
+          chainLength: turn.chainLength,
+          resultValue: turn.resultValue,
+          legalChainStartsBefore: turn.legalChainStartsBefore,
+          legalChainStartsAfter: turn.legalChainStartsAfter,
+          retiredTileCountBefore: turn.retiredTileCountBefore,
+          retiredTileCountAfter: turn.retiredTileCountAfter,
+          isolatedRetiredTileCountBefore: turn.isolatedRetiredTileCountBefore,
+          isolatedRetiredTileCountAfter: turn.isolatedRetiredTileCountAfter,
+        });
+      }
     }
-    if (r.outputs.chainResultHistogram.length > chainResultLen) {
-      chainResultLen = r.outputs.chainResultHistogram.length;
+
+    retirementEventsPerGame.push(eventsThisGame);
+    const firstRetirementTurn = retirementEventTurns[0];
+    if (firstRetirementTurn !== undefined) {
+      turnsSurvivedAfterFirstRetirement.push(game.finalTurn - firstRetirementTurn);
     }
-  }
-  const chainLengthDistribution = new Array<number>(chainLengthLen).fill(0);
-  const chainResultDistribution = new Array<number>(chainResultLen).fill(0);
-
-  for (const r of results) {
-    allLengths.push(r.outputs.turns);
-    allMaxTiles.push(r.outputs.maxTile);
-
-    const tileKey = String(r.outputs.maxTile);
-    maxTileDistribution[tileKey] = (maxTileDistribution[tileKey] ?? 0) + 1;
-
-    const deathKey = r.outputs.deathCause ?? 'none';
-    deathCauseDistribution[deathKey] = (deathCauseDistribution[deathKey] ?? 0) + 1;
-
-    if (r.outputs.finalPhase === 'game-over') {
-      completed.push(r);
-      completedLengths.push(r.outputs.turns);
-    }
-
-    for (let i = 0; i < r.outputs.chainLengthHistogram.length; i++) {
-      chainLengthDistribution[i] = (chainLengthDistribution[i] ?? 0) + (r.outputs.chainLengthHistogram[i] ?? 0);
-    }
-    for (let i = 0; i < r.outputs.chainResultHistogram.length; i++) {
-      chainResultDistribution[i] = (chainResultDistribution[i] ?? 0) + (r.outputs.chainResultHistogram[i] ?? 0);
+    const secondRetirementTurn = retirementEventTurns[1];
+    if (secondRetirementTurn !== undefined) {
+      turnsSurvivedAfterSecondRetirement.push(game.finalTurn - secondRetirementTurn);
     }
   }
 
   return {
-    inputs: {
-      config: options.config,
-      strategy: options.strategy,
-      n: options.n,
-      startStrategySeed: options.startStrategySeed,
-    },
-    outputs: {
-      completedGames: completed.length,
-      meanGameLength: mean(completedLengths),
-      medianGameLength: percentile(completedLengths, 0.5),
-      p10GameLength: percentile(completedLengths, 0.1),
-      p90GameLength: percentile(completedLengths, 0.9),
-      meanMaxTile: mean(allMaxTiles),
-      medianMaxTile: percentile(allMaxTiles, 0.5),
-      maxTileDistribution,
-      chainLengthDistribution,
-      chainResultDistribution,
-      deathCauseDistribution,
-    },
+    firstRetirementTurn: retirementTurns.length === 0 ? null : Math.min(...retirementTurns),
+    retirementTurns,
+    retirementEventsPerGame,
+    cascadeRetirementsPerTransition,
+    cascadesFollowedByImmediateGameOver,
+    activeSpawnPoolAtDeath,
+    retiredTileCountOverTime,
+    isolatedRetiredTileCountOverTime,
+    legalChainStartDeltaAfterRetirement,
+    turnsSurvivedAfterFirstRetirement,
+    turnsSurvivedAfterSecondRetirement,
+    triggers,
   };
 }
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
-
-function mean(xs: readonly number[]): number {
-  if (xs.length === 0) return 0;
-  let s = 0;
-  for (const v of xs) s += v;
-  return s / xs.length;
+function bucketChainLength(length: number, buckets: Record<keyof ChainLengthBucketMetrics, number>): void {
+  if (length <= 4) {
+    buckets.short2To4++;
+  } else if (length <= 9) {
+    buckets.medium5To9++;
+  } else {
+    buckets.long10Plus++;
+  }
 }
 
-/**
- * Linear-interpolated percentile. p ∈ [0, 1]. Returns 0 for empty input
- * (consistent with mean's behavior — caller should check completedGames
- * before relying on these stats).
- */
-function percentile(xs: readonly number[], p: number): number {
-  if (xs.length === 0) return 0;
-  const sorted = [...xs].sort((a, b) => a - b);
-  const idx = (sorted.length - 1) * p;
-  const lo = Math.floor(idx);
-  const hi = Math.ceil(idx);
-  if (lo === hi) return sorted[lo] ?? 0;
-  const frac = idx - lo;
-  return (sorted[lo] ?? 0) * (1 - frac) + (sorted[hi] ?? 0) * frac;
+function analyzeChoiceRichness(games: readonly GameRunResult[]): ChoiceRichnessMetrics {
+  const startsBefore: number[] = [];
+  const startsAfter: number[] = [];
+  const forcedTurnBuckets = {
+    oneStart: 0,
+    twoToThreeStarts: 0,
+    fourPlusStarts: 0,
+  };
+
+  for (const game of games) {
+    for (const turn of game.turns) {
+      startsBefore.push(turn.legalChainStartsBefore);
+      startsAfter.push(turn.legalChainStartsAfter);
+      if (turn.legalChainStartsBefore <= 1) {
+        forcedTurnBuckets.oneStart++;
+      } else if (turn.legalChainStartsBefore <= 3) {
+        forcedTurnBuckets.twoToThreeStarts++;
+      } else {
+        forcedTurnBuckets.fourPlusStarts++;
+      }
+    }
+  }
+
+  return {
+    legalChainStartsBefore: {
+      p10: percentile(startsBefore, 0.1),
+      median: percentile(startsBefore, 0.5),
+      p90: percentile(startsBefore, 0.9),
+    },
+    legalChainStartsAfter: {
+      p10: percentile(startsAfter, 0.1),
+      median: percentile(startsAfter, 0.5),
+      p90: percentile(startsAfter, 0.9),
+    },
+    forcedTurnBuckets,
+  };
+}
+
+function analyzeStrategyBehavior(games: readonly GameRunResult[]): StrategyBehaviorMetrics {
+  const modeDistribution: Record<string, number> = {};
+  const intentDistribution: Record<string, number> = {};
+
+  for (const game of games) {
+    for (const turn of game.turns) {
+      const diagnostics = turn.strategyDiagnostics;
+      if (diagnostics === undefined) continue;
+      modeDistribution[diagnostics.mode] = (modeDistribution[diagnostics.mode] ?? 0) + 1;
+      intentDistribution[diagnostics.intent] = (intentDistribution[diagnostics.intent] ?? 0) + 1;
+    }
+  }
+
+  return { modeDistribution, intentDistribution };
+}
+
+export function analyzeGames(games: readonly GameRunResult[]): SimulationOutputs {
+  const maxTileDistribution: Record<number, number> = {};
+  const chainLengthDistribution: Record<number, number> = {};
+  const chainLengthBuckets = {
+    short2To4: 0,
+    medium5To9: 0,
+    long10Plus: 0,
+  };
+  const resultValueDistribution: Record<number, number> = {};
+  const deathCauseDistribution: Record<GameRunResult['deathCause'], number> = {
+    'no-legal-chain-start': 0,
+    'strategy-null': 0,
+    'max-turns': 0,
+  };
+
+  for (const game of games) {
+    increment(maxTileDistribution, game.maxTileReached);
+    deathCauseDistribution[game.deathCause]++;
+
+    for (const turn of game.turns) {
+      increment(chainLengthDistribution, turn.chainLength);
+      bucketChainLength(turn.chainLength, chainLengthBuckets);
+      increment(resultValueDistribution, turn.resultValue);
+    }
+  }
+
+  const lengths = games.map(game => game.finalTurn);
+  return {
+    gameLength: {
+      p10: percentile(lengths, 0.1),
+      median: percentile(lengths, 0.5),
+      p90: percentile(lengths, 0.9),
+    },
+    maxTileDistribution,
+    chainLengthDistribution,
+    chainLengthBuckets,
+    resultValueDistribution,
+    deathCauseDistribution,
+    choiceRichness: analyzeChoiceRichness(games),
+    strategyBehavior: analyzeStrategyBehavior(games),
+    retirement: analyzeRetirement(games),
+  };
 }
