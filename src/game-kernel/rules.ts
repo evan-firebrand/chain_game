@@ -16,7 +16,8 @@ export function computeResultValue(
   sameExtensions: number,
   config: Pick<GameConfig, 'ruleK'>
 ): TileValue {
-  const bonus = Math.floor(sameExtensions / config.ruleK);
+  const k = config.ruleK;
+  const bonus = k > 0 ? Math.min(Math.floor(sameExtensions / k), 40) : 0;
   const result = lastValue * 2 * Math.pow(2, bonus);
   return result;
 }

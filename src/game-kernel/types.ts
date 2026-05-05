@@ -68,6 +68,8 @@ export interface GameState {
   readonly spawnPoolMin: TileValue;
   /** Current spawn pool max (advances when retirement fires). */
   readonly spawnPoolMax: TileValue;
+  /** Accumulated spawn weights — persists high-tier weights added by retirement. */
+  readonly spawnWeights: Readonly<Partial<Record<TileValue, number>>>;
   /** PRNG state at this moment — deterministic, restorable. */
   readonly prngState: number;
   /** Accumulated event log for this game (used by sim harness). */

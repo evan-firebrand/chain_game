@@ -260,7 +260,7 @@ export function mountTuningConsole(opts: TuningConsoleOpts): TuningConsoleHandle
   const ruleKSlider = makeSlider({
     id: 'tc-rulek',
     label: 'Rule D · k',
-    min: 0,
+    min: 1,
     max: 8,
     step: 1,
     value: initialConfig.ruleK,
