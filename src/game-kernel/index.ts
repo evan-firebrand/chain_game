@@ -11,16 +11,13 @@ import type {
   GameEvent,
   ChainResolvedEvent,
   TilesSpawnedEvent,
+  RetirementFiredEvent,
   GameOverEvent,
 } from './types.js';
 import { applyGravity, setTile, removeTiles, spawnTiles } from './board.js';
-import {
-  getAdjacentCells,
-  validateChainExtension,
-  resolveChain,
-  validateAndResolveChain,
-} from './chain.js';
-import { EMPTY_EVENTS, EMPTY_TILE, lcgFloat, lcgNext, pickTileValue } from './_internal.js';
+import { getAdjacentCells, validateChainExtension, resolveChain } from './chain.js';
+import { checkRetirement, advanceSpawnPool, markRetiredTiles, computeCriticalTiles } from './retirement.js';
+import { forEachTileValueInRange, previousTileValue } from './values.js';
 
 // Re-export public types
 export type {
@@ -46,17 +43,71 @@ export type {
 
 export { DEFAULT_CONFIG } from './types.js';
 export { computeResultValue } from './rules.js';
+export {
+  EMPTY_TILE_VALUE,
+  MIN_TILE_VALUE,
+  isTileValue,
+  isPlayableTileValue,
+  nextTileValue,
+  previousTileValue,
+  tileValueStepsBelow,
+  forEachTileValueInRange,
+} from './values.js';
 export { getAdjacentCells, validateChainExtension, resolveChain } from './chain.js';
 export { applyGravity, setTile, removeTiles, spawnTiles } from './board.js';
+export { computeCriticalTiles } from './retirement.js';
+
+// ─── LCG PRNG (duplicated here for initial board fill) ───────────────────
+
+function lcgNext(state: number): number {
+  return (Math.imul(1664525, state) + 1013904223) >>> 0;
+}
+
+function lcgFloat(state: number): number {
+  return state / 0x100000000;
+}
+
+function pickTileValue(
+  config: Pick<GameConfig, 'spawnPoolMin' | 'spawnPoolMax' | 'spawnWeights'>,
+  rand: number
+): TileValue {
+  const entries: [TileValue, number][] = [];
+  let totalWeight = 0;
+
+  forEachTileValueInRange(config.spawnPoolMin, config.spawnPoolMax, v => {
+    const configuredWeight = config.spawnWeights[v];
+    const previousTier = previousTileValue(v);
+    const weight = configuredWeight ?? (
+      v === config.spawnPoolMax ? (config.spawnWeights[previousTier ?? 0] ?? 1) / 2 : 0
+    );
+    if (weight > 0) {
+      entries.push([v, weight]);
+      totalWeight += weight;
+    }
+  });
+
+  if (totalWeight === 0 || entries.length === 0) {
+    return config.spawnPoolMin;
+  }
+
+  let threshold = rand * totalWeight;
+  for (const [val, weight] of entries) {
+    threshold -= weight;
+    if (threshold <= 0) {
+      return val;
+    }
+  }
+
+  const last = entries[entries.length - 1];
+  return last !== undefined ? last[0] : config.spawnPoolMin;
+}
 
 // ─── Board initialization ─────────────────────────────────────────────────
 
 function createEmptyBoard(rows: number, cols: number): Board {
-  return Array.from({ length: rows }, () => {
-    const row = new Array<typeof EMPTY_TILE>(cols);
-    for (let i = 0; i < cols; i++) row[i] = EMPTY_TILE;
-    return row;
-  }) as Board;
+  return Array.from({ length: rows }, () =>
+    Array.from({ length: cols }, () => ({ value: 0 as TileValue, retired: false, critical: false }))
+  ) as Board;
 }
 
 function fillBoard(
@@ -73,7 +124,7 @@ function fillBoard(
       currentPrng = lcgNext(currentPrng);
       const rand = lcgFloat(currentPrng);
       const value = pickTileValue(config, rand);
-      board = setTile(board, { row: r as Row, col: c as Col }, { value, retired: false });
+      board = setTile(board, { row: r as Row, col: c as Col }, { value, retired: false, critical: false });
     }
   }
 
@@ -90,25 +141,24 @@ function fillBoard(
 export function createGame(config: GameConfig): GameState {
   let prngState = config.prngSeed;
 
-  // Single fill — no retry loop. If the natural fill happens to have a legal
-  // chain start, the board is returned as-is (preserves deterministic
-  // fixtures for the common seeds). Otherwise we deterministically inject
-  // an adjacent same-value pair at (0,0)-(0,1), the same fallback the old
-  // retry loop used after 100 attempts.
-  const filled = fillBoard(config.gridRows, config.gridCols, config, prngState);
-  let board: Board = filled.board;
-  prngState = filled.prngState;
+  // Fill board, retry until at least one valid chain start exists
+  let board: Board;
+  let attempt = 0;
+  for (;;) {
+    const result = fillBoard(config.gridRows, config.gridCols, config, prngState);
+    board = result.board;
+    prngState = result.prngState;
+    attempt++;
 
-  if (!hasLegalChainStart(board)) {
-    const firstTile = board[0]?.[0];
-    /* v8 ignore next 2 — fillBoard always populates (0,0); guard for
-       degenerate configs only. */
-    if (firstTile !== undefined && firstTile.value !== 0) {
-      board = setTile(
-        board,
-        { row: 0 as Row, col: 1 as Col },
-        { value: firstTile.value, retired: false },
-      );
+    if (hasLegalChainStart(board)) break;
+
+    // If no legal start after many attempts, force a pair
+    if (attempt >= 100) {
+      const firstTile = board[0]?.[0];
+      if (firstTile !== undefined && firstTile.value !== 0) {
+        board = setTile(board, { row: 0 as Row, col: 1 as Col }, { value: firstTile.value, retired: false, critical: false });
+      }
+      break;
     }
   }
 
@@ -121,8 +171,7 @@ export function createGame(config: GameConfig): GameState {
     spawnPoolMin: config.spawnPoolMin,
     spawnPoolMax: config.spawnPoolMax,
     prngState,
-    events: EMPTY_EVENTS,
-    lastEvents: EMPTY_EVENTS,
+    events: [],
   };
 }
 
@@ -151,11 +200,10 @@ export function validateChain(
     }
   }
 
-  // Check no cell reuse — pack (row, col) into a single integer key
-  // so the Set is keyed by number rather than allocating a string per cell.
-  const seen = new Set<number>();
+  // Check no cell reuse
+  const seen = new Set<string>();
   for (const cell of chain) {
-    const key = cell.row * cols + cell.col;
+    const key = `${cell.row},${cell.col}`;
     if (seen.has(key)) {
       return { valid: false, reason: 'Cell reuse not allowed' };
     }
@@ -264,35 +312,28 @@ export function applyAction(state: GameState, action: Action): GameState {
       }
 
       const { chain } = action;
-      // Single-pass validate + resolve. validateChain and resolveChain are
-      // still exported for callers (UI hover state) that only need one half.
-      const validated = validateAndResolveChain(state.board, chain, state.config);
-      if (!validated.valid) {
+      const validation = validateChain(state.board, chain);
+      if (!validation.valid) {
         return state;
       }
-      const { resultValue, sameExtensions, doublingExtensions } = validated;
+
+      const { resultValue, sameExtensions, doublingExtensions } = resolveChain(
+        state.board,
+        chain,
+        state.config
+      );
 
       const lastCell = chain[chain.length - 1];
-      /* v8 ignore next 1 */
       if (lastCell === undefined) return state;
 
       const newEvents: GameEvent[] = [];
 
       // Remove chain tiles, place result at last cell
       let board = removeTiles(state.board, chain);
-      board = setTile(board, lastCell, { value: resultValue, retired: false });
+      board = setTile(board, lastCell, { value: resultValue, retired: false, critical: false });
 
       // Apply gravity
       board = applyGravity(board);
-
-      // Spawn L-1 tiles
-      const { board: boardAfterSpawn, prngState: newPrng, spawned } = spawnTiles(
-        board,
-        chain.length,
-        state.config,
-        state.prngState
-      );
-      board = boardAfterSpawn;
 
       // Build chain-resolved event
       const chainResolvedEvent: ChainResolvedEvent = {
@@ -305,6 +346,47 @@ export function applyAction(state: GameState, action: Action): GameState {
       };
       newEvents.push(chainResolvedEvent);
 
+      // Update maxTileEver
+      const newMaxTileEver = (
+        resultValue > state.maxTileEver ? resultValue : state.maxTileEver
+      );
+
+      let runtimeSpawnConfig: GameConfig = {
+        ...state.config,
+        spawnPoolMin: state.spawnPoolMin,
+        spawnPoolMax: state.spawnPoolMax,
+      };
+      let newSpawnPoolMin = state.spawnPoolMin;
+      let newSpawnPoolMax = state.spawnPoolMax;
+
+      for (;;) {
+        const retiredTier = checkRetirement(newMaxTileEver, newSpawnPoolMax);
+        if (retiredTier === null) break;
+
+        const advancedPool = advanceSpawnPool(runtimeSpawnConfig, retiredTier);
+        newSpawnPoolMin = advancedPool.spawnPoolMin;
+        newSpawnPoolMax = advancedPool.spawnPoolMax;
+        runtimeSpawnConfig = { ...state.config, ...advancedPool };
+        board = markRetiredTiles(board, retiredTier);
+
+        const retirementEvent: RetirementFiredEvent = {
+          kind: 'retirement-fired',
+          retiredTier,
+          newSpawnPoolMin,
+          newSpawnPoolMax,
+        };
+        newEvents.push(retirementEvent);
+      }
+
+      // Spawn L-1 tiles
+      const { board: boardAfterSpawn, prngState: newPrng, spawned } = spawnTiles(
+        board,
+        chain.length,
+        runtimeSpawnConfig,
+        state.prngState
+      );
+      board = boardAfterSpawn;
+
       // Build tiles-spawned event
       if (spawned.length > 0) {
         const tilesSpawnedEvent: TilesSpawnedEvent = {
@@ -314,14 +396,8 @@ export function applyAction(state: GameState, action: Action): GameState {
         newEvents.push(tilesSpawnedEvent);
       }
 
-      // Update maxTileEver
-      const newMaxTileEver = (
-        resultValue > state.maxTileEver ? resultValue : state.maxTileEver
-      );
-
-      // Retirement stub — checkRetirement goes here in Phase 4
-      const newSpawnPoolMin = state.spawnPoolMin;
-      const newSpawnPoolMax = state.spawnPoolMax;
+      // Compute critical state after all board mutations for this turn are complete
+      board = computeCriticalTiles(board);
 
       // Check loss condition
       const legalStart = hasLegalChainStart(board);
@@ -338,15 +414,6 @@ export function applyAction(state: GameState, action: Action): GameState {
         newPhase = 'game-over';
       }
 
-      // Quadratic-growth defuse: when recordEvents is opted out, leave
-      // state.events pointing at the shared frozen empty array instead of
-      // spreading the prior cumulative log into a new array each turn.
-      // Per-turn delta is always available via state.lastEvents.
-      const events: readonly GameEvent[] =
-        state.config.recordEvents === false
-          ? EMPTY_EVENTS
-          : [...state.events, ...newEvents];
-
       return {
         board,
         config: state.config,
@@ -356,8 +423,7 @@ export function applyAction(state: GameState, action: Action): GameState {
         spawnPoolMin: newSpawnPoolMin,
         spawnPoolMax: newSpawnPoolMax,
         prngState: newPrng,
-        events,
-        lastEvents: newEvents,
+        events: [...state.events, ...newEvents],
       };
     }
   }

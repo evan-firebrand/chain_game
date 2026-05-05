@@ -1,97 +1,72 @@
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { DEFAULT_CONFIG } from '../../src/game-kernel/index.js';
-import { playOneGame, runGames } from '../../src/sim-harness/runner.js';
-import type { GameConfig } from '../../src/game-kernel/index.js';
+import {
+  greedyStrategy,
+  randomStrategy,
+  runSimulation,
+} from '../../src/sim-harness/index.js';
 
-const CONFIG: GameConfig = { ...DEFAULT_CONFIG, prngSeed: 42 };
+describe('runSimulation', () => {
+  it('returns exactly N game results', () => {
+    const result = runSimulation({
+      config: DEFAULT_CONFIG,
+      strategy: randomStrategy,
+      runs: 3,
+      seed: 100,
+      maxTurns: 4,
+      maxChainLength: 3,
+    });
 
-describe('playOneGame', () => {
-  it('produces a valid GameResult for the random strategy', () => {
-    const r = playOneGame(CONFIG, 'random', 1);
-    expect(r.inputs.config).toEqual(CONFIG);
-    expect(r.inputs.strategy).toBe('random');
-    expect(r.inputs.strategySeed).toBe(1);
-    expect(r.outputs.turns).toBeGreaterThan(0);
-    expect(r.outputs.maxTile).toBeGreaterThan(0);
-    expect(['playing', 'game-over']).toContain(r.outputs.finalPhase);
+    expect(result.games).toHaveLength(3);
+    expect(result.inputs.runCount).toBe(3);
+    expect(result.inputs.retirementMode).toBe('cascade');
   });
 
-  it('returns deathCause=no-legal-chain-start when game ends naturally', () => {
-    const r = playOneGame(CONFIG, 'random', 1, { maxTurns: 100_000 });
-    if (r.outputs.finalPhase === 'game-over') {
-      expect(r.outputs.deathCause).toBe('no-legal-chain-start');
-    } else {
-      expect(r.outputs.deathCause).toBeNull();
+  it('is deterministic for the same seed, config, and strategy', () => {
+    const options = {
+      config: DEFAULT_CONFIG,
+      strategy: randomStrategy,
+      runs: 4,
+      seed: 42,
+      maxTurns: 6,
+      maxChainLength: 3,
+    };
+
+    expect(runSimulation(options)).toEqual(runSimulation(options));
+  });
+
+  it('records legal committed chains in turn records', () => {
+    const result = runSimulation({
+      config: DEFAULT_CONFIG,
+      strategy: greedyStrategy,
+      runs: 1,
+      seed: 5,
+      maxTurns: 3,
+      maxChainLength: 3,
+    });
+
+    for (const game of result.games) {
+      for (const turn of game.turns) {
+        expect(turn.chainLength).toBe(turn.chain.length);
+        expect(turn.resultValue).toBeGreaterThan(0);
+      }
     }
   });
 
-  it('honours maxTurns cap (game right-censored)', () => {
-    const r = playOneGame(CONFIG, 'random', 1, { maxTurns: 5 });
-    expect(r.outputs.turns).toBeLessThanOrEqual(5);
-    if (r.outputs.turns === 5) {
-      expect(r.outputs.finalPhase).toBe('playing');
-      expect(r.outputs.deathCause).toBeNull();
-    }
-  });
+  it('stops at max-turns when the game is still playing', () => {
+    const result = runSimulation({
+      config: DEFAULT_CONFIG,
+      strategy: greedyStrategy,
+      runs: 1,
+      seed: 7,
+      maxTurns: 1,
+      maxChainLength: 3,
+    });
 
-  it('chainLengthHistogram counts add up to total turns', () => {
-    const r = playOneGame(CONFIG, 'random', 1);
-    const totalChains = r.outputs.chainLengthHistogram.reduce((a, b) => a + b, 0);
-    expect(totalChains).toBe(r.outputs.turns);
-  });
-
-  it('chainResultHistogram[k] only set for valid log2 indices', () => {
-    const r = playOneGame(CONFIG, 'random', 1);
-    expect(r.outputs.chainResultHistogram.length).toBe(16);
-    // log2(2)=1 is the smallest possible result; index 0 should be 0.
-    expect(r.outputs.chainResultHistogram[0]).toBe(0);
-  });
-});
-
-describe('playOneGame — determinism', () => {
-  it('same (config, strategy, strategySeed) → byte-identical result', () => {
-    const a = playOneGame(CONFIG, 'random', 7);
-    const b = playOneGame(CONFIG, 'random', 7);
-    expect(a).toEqual(b);
-  });
-
-  it('different strategy seeds produce different turns counts (typical case)', () => {
-    const a = playOneGame(CONFIG, 'random', 1);
-    const b = playOneGame(CONFIG, 'random', 1000);
-    // Not strictly required but very likely for any non-trivial workload.
-    // If this ever flakes we can pin specific seeds known to differ.
-    expect(a.outputs.turns).not.toBe(b.outputs.turns);
-  });
-
-  it('same kernel seed but different strategy seeds → maxTile typically differs', () => {
-    const seenTiles = new Set<number>();
-    for (let s = 1; s <= 5; s++) {
-      const r = playOneGame(CONFIG, 'random', s);
-      seenTiles.add(r.outputs.maxTile);
-    }
-    expect(seenTiles.size).toBeGreaterThan(1);
-  });
-});
-
-describe('runGames', () => {
-  it('returns N results in order', () => {
-    const results = runGames(CONFIG, 'random', { n: 5, startStrategySeed: 0 });
-    expect(results).toHaveLength(5);
-    for (let i = 0; i < results.length; i++) {
-      expect(results[i]!.inputs.strategySeed).toBe(i);
-    }
-  });
-
-  it('is deterministic across runs', () => {
-    const a = runGames(CONFIG, 'random', { n: 5, startStrategySeed: 42 });
-    const b = runGames(CONFIG, 'random', { n: 5, startStrategySeed: 42 });
-    expect(a).toEqual(b);
-  });
-
-  it('honours maxTurns', () => {
-    const results = runGames(CONFIG, 'random', { n: 3, startStrategySeed: 0, maxTurns: 10 });
-    for (const r of results) {
-      expect(r.outputs.turns).toBeLessThanOrEqual(10);
+    const game = result.games[0];
+    expect(game?.finalTurn).toBe(1);
+    if (game?.finalPhase === 'playing') {
+      expect(game.deathCause).toBe('max-turns');
     }
   });
 });

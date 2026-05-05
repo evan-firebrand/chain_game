@@ -6,6 +6,16 @@ export class GameSession {
   private state: GameState;
   private listeners: SessionEventListener[] = [];
 
+  // Tier 2 keys reject mid-game patches. See docs/engineering/PARAMETER_TIERS.md
+  // and docs/engineering/adr/0002-session-update-config.md.
+  private static readonly TIER2_KEYS: readonly (keyof GameConfig)[] = [
+    'gridRows',
+    'gridCols',
+    'spawnPoolMin',
+    'spawnPoolMax',
+    'prngSeed',
+  ];
+
   constructor(config: GameConfig) {
     this.state = createGame(config);
     this._emit([]);
@@ -16,14 +26,23 @@ export class GameSession {
   }
 
   dispatch(action: Action): void {
-    const prev = this.state;
+    const prevCount = this.state.events.length;
     this.state = applyAction(this.state, action);
-    // Reference equality means applyAction was a no-op (game-over guard
-    // or invalid chain) and `lastEvents` carries stale data from the
-    // prior transition; emit nothing in that case.
-    const newKernelEvents: readonly GameEvent[] =
-      this.state === prev ? [] : this.state.lastEvents;
+    const newKernelEvents = this.state.events.slice(prevCount) as readonly GameEvent[];
     this._emit(newKernelEvents);
+  }
+
+  updateConfig(patch: Partial<GameConfig>): void {
+    for (const key of Object.keys(patch)) {
+      if (GameSession.TIER2_KEYS.includes(key as keyof GameConfig)) {
+        throw new Error(
+          `Config key "${key}" is Tier 2; dispatch a 'new-game' action instead`
+        );
+      }
+    }
+    const newConfig: GameConfig = { ...this.state.config, ...patch };
+    this.state = { ...this.state, config: newConfig };
+    this._emit([]);
   }
 
   on(listener: SessionEventListener): () => void {

@@ -1,117 +1,260 @@
-import type { GameConfig } from '../game-kernel/index.js';
+import type {
+  Cell,
+  CommitChainAction,
+  GameConfig,
+  GameEvent,
+  GamePhase,
+  GameState,
+  TileValue,
+} from '../game-kernel/index.js';
 
-// ─── Schema ──────────────────────────────────────────────────────────────────
-// Mirrors docs/engineering/SIM_HARNESS_SCHEMA.md. Keep in lockstep — any
-// change here requires a matching change to that document, and vice versa.
+export type StrategyId =
+  | 'random'
+  | 'greedy'
+  | 'heuristic'
+  | 'weightedHeuristic'
+  | 'longRandomWalk'
+  | 'longGreedyWalk'
+  | 'milestonePush'
+  | 'preRetirementCleanup'
+  | 'strategicHumanLike'
+  | 'casual'
+  | 'engaged'
+  | 'skilled'
+  | 'speedrunner'
+  | 'retirementAvoider'
+  | 'sweeper'
+  | 'cleanupPrioritizer'
+  | 'adaptive';
 
-/** Stable name of an automated playing strategy. */
-export type StrategyName = 'random' | 'greedy' | 'heuristic';
+export type RetirementModeLabel = 'cascade';
 
-/**
- * GameConfig keys whose value is a single number that one-axis sweeps can
- * vary. spawnWeights is excluded — it's an object; use a separate
- * weight-sweep schema if needed.
- */
-export type SweepableConfigKey =
-  | 'ruleK'
-  | 'gridRows'
-  | 'gridCols'
-  | 'spawnPoolMin'
-  | 'spawnPoolMax'
-  | 'prngSeed';
+export interface StrategyContext {
+  readonly maxChainLength: number;
+  readonly random: () => number;
+}
 
-// ─── GameResult ──────────────────────────────────────────────────────────────
+export type StrategyMode =
+  | 'random'
+  | 'greedy'
+  | 'heuristic'
+  | 'long-random-walk'
+  | 'long-greedy-walk'
+  | 'cleanup'
+  | 'setup'
+  | 'build'
+  | 'milestone'
+  | 'recovery';
 
-export interface GameResultInputs {
+export type StrategyIntent = 'cleanup' | 'setup' | 'push' | 'milestone' | 'recovery';
+
+export interface StrategyDiagnostics {
+  readonly mode: StrategyMode;
+  readonly reasonCode: string;
+  readonly intent: StrategyIntent;
+  readonly candidateChainLength: number;
+  readonly projectedResultValue: TileValue;
+}
+
+export interface StrategyDecision {
+  readonly action: CommitChainAction | null;
+  readonly diagnostics?: StrategyDiagnostics;
+}
+
+export interface SimStrategy {
+  readonly id: StrategyId;
+  chooseAction(state: GameState, context: StrategyContext): StrategyDecision;
+}
+
+export interface SimulationInputs {
   readonly config: GameConfig;
-  readonly strategy: StrategyName;
-  readonly strategySeed: number;
+  readonly strategyId: StrategyId;
+  readonly runCount: number;
+  readonly baseSeed: number;
+  readonly maxTurns: number;
+  readonly maxChainLength: number;
+  readonly retirementMode: RetirementModeLabel;
 }
 
-export interface GameResultOutputs {
-  readonly turns: number;
-  readonly maxTile: number;
-  readonly finalPhase: 'playing' | 'game-over';
-  readonly deathCause: 'no-legal-chain-start' | null;
-  readonly chainLengthHistogram: readonly number[];
-  readonly chainResultHistogram: readonly number[];
+export interface TurnRecord {
+  readonly turn: number;
+  readonly chain: readonly Cell[];
+  readonly chainLength: number;
+  readonly resultValue: TileValue;
+  readonly legalChainStartsBefore: number;
+  readonly legalChainStartsAfter: number;
+  readonly spawnPoolBefore: readonly [TileValue, TileValue];
+  readonly spawnPoolAfter: readonly [TileValue, TileValue];
+  readonly retiredTileCountBefore: number;
+  readonly retiredTileCountAfter: number;
+  readonly isolatedRetiredTileCountBefore: number;
+  readonly isolatedRetiredTileCountAfter: number;
+  readonly strategyDiagnostics?: StrategyDiagnostics;
+  readonly events: readonly GameEvent[];
 }
 
-export interface GameResult {
-  readonly inputs: GameResultInputs;
-  readonly outputs: GameResultOutputs;
+export interface GameRunResult {
+  readonly runIndex: number;
+  readonly seed: number;
+  readonly strategyId: StrategyId;
+  readonly finalTurn: number;
+  readonly finalPhase: GamePhase;
+  readonly deathCause: 'no-legal-chain-start' | 'strategy-null' | 'max-turns';
+  readonly maxTileReached: TileValue;
+  readonly activeSpawnPoolAtDeath: readonly [TileValue, TileValue];
+  readonly events: readonly GameEvent[];
+  readonly turns: readonly TurnRecord[];
 }
 
-// ─── AggregateResult ─────────────────────────────────────────────────────────
+export interface RetirementTriggerSummary {
+  readonly turn: number;
+  readonly retiredTier: TileValue;
+  readonly newSpawnPoolMin: TileValue;
+  readonly newSpawnPoolMax: TileValue;
+  readonly cascadeCountThisTurn: number;
+  readonly followedByImmediateGameOver: boolean;
+  readonly chainLength: number;
+  readonly resultValue: TileValue;
+  readonly legalChainStartsBefore: number;
+  readonly legalChainStartsAfter: number;
+  readonly retiredTileCountBefore: number;
+  readonly retiredTileCountAfter: number;
+  readonly isolatedRetiredTileCountBefore: number;
+  readonly isolatedRetiredTileCountAfter: number;
+}
 
-export interface AggregateResultInputs {
+export interface RetirementMetrics {
+  readonly firstRetirementTurn: number | null;
+  readonly retirementTurns: readonly number[];
+  readonly retirementEventsPerGame: readonly number[];
+  readonly cascadeRetirementsPerTransition: readonly number[];
+  readonly cascadesFollowedByImmediateGameOver: number;
+  readonly activeSpawnPoolAtDeath: readonly (readonly [TileValue, TileValue])[];
+  readonly retiredTileCountOverTime: readonly number[];
+  readonly isolatedRetiredTileCountOverTime: readonly number[];
+  readonly legalChainStartDeltaAfterRetirement: readonly number[];
+  readonly turnsSurvivedAfterFirstRetirement: readonly number[];
+  readonly turnsSurvivedAfterSecondRetirement: readonly number[];
+  readonly triggers: readonly RetirementTriggerSummary[];
+}
+
+export interface ChoiceRichnessMetrics {
+  readonly legalChainStartsBefore: {
+    readonly p10: number;
+    readonly median: number;
+    readonly p90: number;
+  };
+  readonly legalChainStartsAfter: {
+    readonly p10: number;
+    readonly median: number;
+    readonly p90: number;
+  };
+  readonly forcedTurnBuckets: {
+    readonly oneStart: number;
+    readonly twoToThreeStarts: number;
+    readonly fourPlusStarts: number;
+  };
+}
+
+export interface ChainLengthBucketMetrics {
+  readonly short2To4: number;
+  readonly medium5To9: number;
+  readonly long10Plus: number;
+}
+
+export interface StrategyBehaviorMetrics {
+  readonly modeDistribution: Readonly<Record<string, number>>;
+  readonly intentDistribution: Readonly<Record<string, number>>;
+}
+
+export interface SimulationOutputs {
+  readonly gameLength: {
+    readonly p10: number;
+    readonly median: number;
+    readonly p90: number;
+  };
+  readonly maxTileDistribution: Readonly<Record<number, number>>;
+  readonly chainLengthDistribution: Readonly<Record<number, number>>;
+  readonly chainLengthBuckets: ChainLengthBucketMetrics;
+  readonly resultValueDistribution: Readonly<Record<number, number>>;
+  readonly deathCauseDistribution: Readonly<Record<GameRunResult['deathCause'], number>>;
+  readonly choiceRichness: ChoiceRichnessMetrics;
+  readonly strategyBehavior: StrategyBehaviorMetrics;
+  readonly retirement: RetirementMetrics;
+}
+
+export interface SimulationResultRow {
+  readonly inputs: SimulationInputs;
+  readonly outputs: SimulationOutputs;
+  readonly games: readonly GameRunResult[];
+}
+
+export interface RunSimulationOptions {
   readonly config: GameConfig;
-  readonly strategy: StrategyName;
-  readonly n: number;
-  readonly startStrategySeed: number;
+  readonly strategy: SimStrategy;
+  readonly runs: number;
+  readonly seed: number;
+  readonly maxTurns?: number;
+  readonly maxChainLength?: number;
 }
 
-export interface AggregateResultOutputs {
-  readonly completedGames: number;
-  readonly meanGameLength: number;
-  readonly medianGameLength: number;
-  readonly p10GameLength: number;
-  readonly p90GameLength: number;
-  readonly meanMaxTile: number;
-  readonly medianMaxTile: number;
-  readonly maxTileDistribution: Readonly<Record<string, number>>;
-  readonly chainLengthDistribution: readonly number[];
-  readonly chainResultDistribution: readonly number[];
-  readonly deathCauseDistribution: Readonly<Record<string, number>>;
+export interface SweepValue<T> {
+  readonly label: string;
+  readonly value: T;
 }
 
-export interface AggregateResult {
-  readonly inputs: AggregateResultInputs;
-  readonly outputs: AggregateResultOutputs;
-}
-
-// ─── SweepResult ─────────────────────────────────────────────────────────────
-
-export interface SweepResultInputs {
-  readonly sweepKey: SweepableConfigKey;
-  readonly sweepValues: readonly number[];
-  readonly strategy: StrategyName;
-  readonly n: number;
-  readonly startStrategySeed: number;
+export interface SweepOptions<T> extends Omit<RunSimulationOptions, 'config'> {
   readonly baseConfig: GameConfig;
+  readonly values: readonly SweepValue<T>[];
+  readonly applyValue: (config: GameConfig, value: T) => GameConfig;
 }
 
-export interface SweepResultOutputs {
-  readonly rows: readonly AggregateResult[];
+export interface ExperimentProfile {
+  readonly id: string;
+  readonly label: string;
+  readonly designQuestion: string;
+  readonly config: GameConfig;
 }
 
-export interface SweepResult {
-  readonly inputs: SweepResultInputs;
-  readonly outputs: SweepResultOutputs;
+export interface TuningTarget {
+  readonly capTurns: number;
+  readonly naturalDeathRateMin: number;
+  readonly naturalDeathRateMax: number;
+  readonly medianFinalTurnMin: number;
+  readonly medianFinalTurnMax: number;
+  readonly firstRetirementTurnMin: number;
+  readonly firstRetirementTurnMax: number;
+  readonly gamesWithRetirementMinRate: number;
+  readonly cascadeImmediateGameOverMaxRate: number;
 }
 
-// ─── Strategy interface ──────────────────────────────────────────────────────
-// Strategies are pure functions of (FastState, RNG) → chain. Decoupled from
-// the kernel internals so a strategy can be unit-tested with a hand-built
-// FastState.
+export type CandidateLabel =
+  | 'too-forgiving'
+  | 'too-random'
+  | 'too-forced'
+  | 'long-chain-dominant'
+  | 'retirement-cliff'
+  | 'promising';
 
-import type { Cell } from '../game-kernel/index.js';
-import type { FastState } from '../game-kernel/fast/index.js';
-
-/** A deterministic float source seeded by the strategy's own seed. */
-export interface StrategyRng {
-  /** Returns the next float in [0, 1). */
-  next(): number;
-  /** Returns an integer in [0, maxExclusive). */
-  int(maxExclusive: number): number;
+export interface TargetScore {
+  readonly distance: number;
+  readonly deltas: Readonly<Record<string, number>>;
+  readonly hardFailures: readonly string[];
+  readonly labels: readonly CandidateLabel[];
 }
 
-/**
- * A strategy picks the next chain to commit, or returns null when no legal
- * move exists (game is effectively over from the strategy's perspective).
- *
- * Trusted-move contract: returned chain MUST be legal on the supplied
- * FastState. The fast surface is trusted-move and won't validate; the
- * harness will assert in DEBUG mode.
- */
-export type Strategy = (state: FastState, rng: StrategyRng) => readonly Cell[] | null;
+export interface NotableSeeds {
+  readonly shortestNaturalDeath?: number;
+  readonly longestCappedSurvival?: number;
+  readonly largestCascade?: number;
+  readonly largestOvershoot?: number;
+  readonly mostIsolatedRetiredTiles?: number;
+  readonly strongestRecovery?: number;
+}
+
+export interface BatchResultRow {
+  readonly profile: ExperimentProfile;
+  readonly result: SimulationResultRow;
+  readonly score: TargetScore;
+  readonly notableSeeds: NotableSeeds;
+}

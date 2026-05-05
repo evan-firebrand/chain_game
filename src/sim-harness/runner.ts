@@ -1,133 +1,156 @@
-import type { Cell, GameConfig } from '../game-kernel/index.js';
-import { createGame } from '../game-kernel/index.js';
 import {
-  applyChainInPlace,
-  fromPure,
-  type FastState,
-} from '../game-kernel/fast/index.js';
-import type { GameResult, Strategy, StrategyName } from './types.js';
-import { makeStrategyRng, randomStrategy } from './strategies/random.js';
-import { greedyStrategy } from './strategies/greedy.js';
-import { heuristicStrategy } from './strategies/heuristic.js';
+  applyAction,
+  computeChainResult,
+  createGame,
+} from '../game-kernel/index.js';
+import type { GameConfig, GameState, TileValue } from '../game-kernel/index.js';
+import {
+  countIsolatedRetiredTiles,
+  countLegalChainStarts,
+  countRetiredTiles,
+} from './strategies/common.js';
+import type {
+  GameRunResult,
+  RunSimulationOptions,
+  SimulationInputs,
+  SimulationResultRow,
+  StrategyContext,
+  TurnRecord,
+} from './types.js';
+import { analyzeGames } from './analyzer.js';
 
-// ─── Strategy registry ───────────────────────────────────────────────────────
+const DEFAULT_MAX_TURNS = 10_000;
+// Raised from 5: enumerateCandidateChains at depth 5 silently excluded all chains
+// longer than 5 tiles, making simulation metrics invalid (bots missed the majority
+// of available score on boards where chains up to 24 tiles exist).
+const DEFAULT_MAX_CHAIN_LENGTH = 10;
 
-const STRATEGIES: Record<StrategyName, Strategy> = {
-  random: randomStrategy,
-  greedy: greedyStrategy,
-  heuristic: heuristicStrategy,
-};
-
-export function registerStrategy(name: StrategyName, strategy: Strategy): void {
-  STRATEGIES[name] = strategy;
+function lcgNext(state: number): number {
+  return (Math.imul(1664525, state) + 1013904223) >>> 0;
 }
 
-// ─── playOneGame ─────────────────────────────────────────────────────────────
-
-export interface PlayOneOptions {
-  /** Hard cap on turns. Games that hit this are right-censored. */
-  readonly maxTurns?: number;
+function lcgFloat(state: number): number {
+  return state / 0x100000000;
 }
 
-const DEFAULT_MAX_TURNS = 100_000;
-/** Histogram array length cap. Bounded by board area + buffer. */
-const MAX_CHAIN_LENGTH = 64;
-/** Histogram for log2(result) — covers values up to 2^15. */
-const MAX_LOG2_RESULT = 16;
+function withSeed(config: GameConfig, seed: number): GameConfig {
+  return { ...config, prngSeed: seed };
+}
 
-/**
- * Play one game from createGame to game-over (or maxTurns). Returns the
- * GameResult for this single game. Deterministic given (config, strategy,
- * strategySeed).
- *
- * Forces config.recordEvents = false internally — the sim path never needs
- * the cumulative event log, and the GameResult already captures everything
- * the schema records.
- */
-export function playOneGame(
-  config: GameConfig,
-  strategyName: StrategyName,
-  strategySeed: number,
-  options: PlayOneOptions = {},
-): GameResult {
-  const maxTurns = options.maxTurns ?? DEFAULT_MAX_TURNS;
-  const strategy = STRATEGIES[strategyName];
-
-  // Force recordEvents:false — the harness never reads state.events.
-  const simConfig: GameConfig = { ...config, recordEvents: false };
-  const fast: FastState = fromPure(createGame(simConfig));
-  const rng = makeStrategyRng(strategySeed);
-
-  const chainLengthHistogram = new Array<number>(MAX_CHAIN_LENGTH).fill(0);
-  const chainResultHistogram = new Array<number>(MAX_LOG2_RESULT).fill(0);
-
-  let turn = 0;
-
-  while (fast.phase === 'playing' && turn < maxTurns) {
-    const chain: readonly Cell[] | null = strategy(fast, rng);
-    if (chain === null) break;
-
-    const len = chain.length;
-    if (len < MAX_CHAIN_LENGTH) chainLengthHistogram[len] = (chainLengthHistogram[len] ?? 0) + 1;
-
-    const result = applyChainInPlace(fast, chain);
-    if (result === null) break;
-
-    if (result.resultValue > 0) {
-      const log2 = Math.log2(result.resultValue);
-      if (Number.isInteger(log2) && log2 >= 0 && log2 < MAX_LOG2_RESULT) {
-        chainResultHistogram[log2] = (chainResultHistogram[log2] ?? 0) + 1;
-      }
+function maxTileOnBoard(state: GameState): TileValue {
+  let max = state.maxTileEver;
+  for (const row of state.board) {
+    for (const tile of row) {
+      if (tile.value > max) max = tile.value;
     }
-    turn++;
   }
+  return max;
+}
 
+function createStrategyContext(maxChainLength: number, initialSeed: number): StrategyContext {
+  let state = initialSeed >>> 0;
   return {
-    inputs: {
-      config,
-      strategy: strategyName,
-      strategySeed,
-    },
-    outputs: {
-      turns: fast.turn,
-      maxTile: fast.maxTileEver,
-      finalPhase: fast.phase,
-      deathCause: fast.phase === 'game-over' ? 'no-legal-chain-start' : null,
-      chainLengthHistogram,
-      chainResultHistogram,
+    maxChainLength,
+    random: (): number => {
+      state = lcgNext(state);
+      return lcgFloat(state);
     },
   };
 }
 
-// ─── runGames ────────────────────────────────────────────────────────────────
+function runOneGame(
+  options: Required<Pick<RunSimulationOptions, 'maxTurns' | 'maxChainLength'>> & RunSimulationOptions,
+  runIndex: number,
+  seed: number
+): GameRunResult {
+  let state = createGame(withSeed(options.config, seed));
+  const turns: TurnRecord[] = [];
+  const context = createStrategyContext(options.maxChainLength, seed ^ 0x9e3779b9);
+  let deathCause: GameRunResult['deathCause'] = 'max-turns';
 
-export interface RunGamesOptions {
-  readonly n: number;
-  readonly startStrategySeed: number;
-  readonly maxTurns?: number;
+  while (state.phase === 'playing' && state.turn < options.maxTurns) {
+    const decision = options.strategy.chooseAction(state, context);
+    const { action } = decision;
+    if (action === null) {
+      deathCause = 'strategy-null';
+      break;
+    }
+
+    const resultValue = computeChainResult(state.board, action.chain, state.config);
+    const legalChainStartsBefore = countLegalChainStarts(state.board);
+    const retiredTileCountBefore = countRetiredTiles(state.board);
+    const isolatedRetiredTileCountBefore = countIsolatedRetiredTiles(state.board);
+    const spawnPoolBefore = [state.spawnPoolMin, state.spawnPoolMax] as const;
+    const previousEventCount = state.events.length;
+
+    const nextState = applyAction(state, action);
+    const newEvents = nextState.events.slice(previousEventCount);
+    const legalChainStartsAfter = countLegalChainStarts(nextState.board);
+
+    const turnRecord: TurnRecord = {
+      turn: nextState.turn,
+      chain: action.chain,
+      chainLength: action.chain.length,
+      resultValue,
+      legalChainStartsBefore,
+      legalChainStartsAfter,
+      spawnPoolBefore,
+      spawnPoolAfter: [nextState.spawnPoolMin, nextState.spawnPoolMax],
+      retiredTileCountBefore,
+      retiredTileCountAfter: countRetiredTiles(nextState.board),
+      isolatedRetiredTileCountBefore,
+      isolatedRetiredTileCountAfter: countIsolatedRetiredTiles(nextState.board),
+      events: newEvents,
+    };
+
+    turns.push(decision.diagnostics === undefined
+      ? turnRecord
+      : { ...turnRecord, strategyDiagnostics: decision.diagnostics });
+
+    state = nextState;
+  }
+
+  if (state.phase === 'game-over') {
+    deathCause = 'no-legal-chain-start';
+  }
+
+  return {
+    runIndex,
+    seed,
+    strategyId: options.strategy.id,
+    finalTurn: state.turn,
+    finalPhase: state.phase,
+    deathCause,
+    maxTileReached: maxTileOnBoard(state),
+    activeSpawnPoolAtDeath: [state.spawnPoolMin, state.spawnPoolMax],
+    events: state.events,
+    turns,
+  };
 }
 
-/**
- * Play N games for one config. Game i runs with strategySeed =
- * startStrategySeed + i. Returns the per-game results in order.
- *
- * Deterministic for (config, strategyName, n, startStrategySeed).
- */
-export function runGames(
-  config: GameConfig,
-  strategyName: StrategyName,
-  options: RunGamesOptions,
-): GameResult[] {
-  const results = new Array<GameResult>(options.n);
-  const maxTurnsOpt = options.maxTurns;
-  for (let i = 0; i < options.n; i++) {
-    const playOptions: PlayOneOptions = maxTurnsOpt !== undefined ? { maxTurns: maxTurnsOpt } : {};
-    results[i] = playOneGame(
-      config,
-      strategyName,
-      options.startStrategySeed + i,
-      playOptions,
-    );
+export function runSimulation(options: RunSimulationOptions): SimulationResultRow {
+  const maxTurns = options.maxTurns ?? DEFAULT_MAX_TURNS;
+  const maxChainLength = options.maxChainLength ?? DEFAULT_MAX_CHAIN_LENGTH;
+  const normalized = { ...options, maxTurns, maxChainLength };
+  const games: GameRunResult[] = [];
+
+  for (let i = 0; i < options.runs; i++) {
+    games.push(runOneGame(normalized, i, options.seed + i));
   }
-  return results;
+
+  const inputs: SimulationInputs = {
+    config: options.config,
+    strategyId: options.strategy.id,
+    runCount: options.runs,
+    baseSeed: options.seed,
+    maxTurns,
+    maxChainLength,
+    retirementMode: 'cascade',
+  };
+
+  return {
+    inputs,
+    outputs: analyzeGames(games),
+    games,
+  };
 }

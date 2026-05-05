@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, develop, 'feat/**', 'fix/**', 'docs/**', 'arch/**']
+    branches: [main, 'feat/**', 'fix/**', 'docs/**', 'chore/**', 'arch/**']
   pull_request:
-    branches: [main, develop]
+    branches: [main]
 
 jobs:
   typecheck:

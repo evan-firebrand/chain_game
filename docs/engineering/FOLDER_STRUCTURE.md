@@ -43,7 +43,9 @@ Agents read these files. Agents never write to them.
 | `FOLDER_STRUCTURE.md` | This file |
 | `PARAMETER_TIERS.md` | Tier 1/2/3 parameter assignments for Tuning Console (Phase 3) |
 | `SIM_HARNESS_SCHEMA.md` | Simulation output schema (Evan-approved; design before Phase 5 runner) |
-| `RETIREMENT_DESIGN_NOTES.md` | Created during Phase 4 — any spec deviations noted here |
+| `RETIREMENT_DESIGN_NOTES.md` | Phase 4 retirement implementation notes; spec deviations noted here |
+| `PHASE_5_5_REQUIREMENTS.md` | Phase 5.5 design-lab scope and acceptance criteria |
+| `PHASE_5_5_FINDINGS.md` | Phase 5.5 smoke results and follow-up actions |
 
 ### `docs/engineering/session-briefs/`
 
@@ -56,6 +58,14 @@ Every agent session starts with the relevant brief from this directory.
 Evan's playtest notes. Naming: `YYYY-MM-DD-v[version].md`
 Created after every play session. Informs design gap protocols and ADR revisit triggers.
 
+### `docs/engineering/puzzles/`
+
+Canned board scenarios used as regression fixtures and study seeds.
+
+### `docs/engineering/studies/`
+
+Multi-pass design investigations (e.g. substrate audit, death-mechanism). Each study has its own writeup; results may feed PHASE_*_FINDINGS or future ADRs.
+
 ### `docs/engineering/adr/`
 
 Architecture Decision Records. Naming: `NNNN-short-title.md` (zero-padded 4 digits).
@@ -64,6 +74,7 @@ Architecture Decision Records. Naming: `NNNN-short-title.md` (zero-padded 4 digi
 |---|---|---|
 | `0000-tech-stack.md` | Accepted | 2026-04-28 |
 | `0001-pure-kernel-module.md` | Accepted | 2026-04-28 |
+| `0002-session-update-config.md` | Proposed (Evan approval pending) | 2026-04-28 |
 
 ---
 
@@ -75,17 +86,17 @@ The single source of truth for all game rules.
 
 | File | Purpose |
 |---|---|
-| `index.ts` | Public API — re-exports only. No logic in this file. |
+| `index.ts` | Public API — re-exports + `applyAction` orchestration |
 | `types.ts` | ALL `GameState`, `Action`, `Config`, `Event` types |
 | `chain.ts` | Chain validation (start rule, extension rule, adjacency) + chain resolution |
 | `board.ts` | Grid operations: `applyGravity`, `spawnTiles`, `setTile`, `removeTiles` |
 | `rules.ts` | Rule D k=2: `computeResultValue` |
-| `retirement.ts` | Retirement trigger detection and spawn pool advancement |
+| `retirement.ts` | Retirement trigger detection and spawn pool advancement (Phase 4) |
+| `values.ts` | TileValue helpers: `nextTileValue`, `previousTileValue`, range iteration |
 
 Constraints:
 - Zero imports from anywhere in `src/` — self-contained.
 - All functions are pure (see ADR-0001).
-- `retirement.ts` is a **stub** in Phase 1 (exports the correct signatures, throws `NotImplemented`). Fully implemented in Phase 4.
 
 ### `src/game-session/` — Game Logic Agent
 
@@ -93,8 +104,10 @@ Thin stateful wrapper around the kernel.
 
 | File | Purpose |
 |---|---|
+| `index.ts` | Public re-exports |
 | `session.ts` | Creates and manages a game session; calls `applyAction`; emits events |
 | `events.ts` | Session-level event type definitions (extends kernel events) |
+| `playlog.ts` | Per-turn playlog recorder — feeds `fit-weights` and replay flows |
 
 Constraints:
 - Imports from `game-kernel` only.
@@ -110,6 +123,10 @@ Rendering and input only. Never computes game logic.
 | `board.ts` | Canvas-based board renderer |
 | `input.ts` | Chain input handler (mouse drag / touch path) — MUST be a distinct module |
 | `hud.ts` | Score display, tile max, retirement milestone indicator |
+| `effects.ts` | Screen pulse, merge burst, conquest celebration animations |
+| `geometry.ts` | Canvas grid math (cell-to-pixel and hit testing) |
+| `playlog-controls.ts` | UI for downloading the per-turn playlog |
+| `theme.ts` | Color tokens for tile tiers and lifecycle phases |
 
 Constraints:
 - Imports from `game-session` only.
@@ -132,17 +149,25 @@ Constraints:
 
 ### `src/sim-harness/` — Simulation Agent
 
-Headless batch runner. Phase 5.
+Headless batch runner. Phase 5 + Phase 5.5 design lab.
 
 | File | Purpose |
 |---|---|
+| `index.ts` | Public re-exports |
 | `runner.ts` | Single-config runner: plays N games, returns results array |
 | `sweep.ts` | Parameter sweep: varies one config key across a range |
+| `batch.ts` | Matrix runner over named experiment profiles |
+| `profiles.ts` | Named experiment configs (`baselinePowerLaw`, `flat`, etc.) |
+| `scoring.ts` | Target-distance scoring + candidate labels (`promising`, `too-forgiving`, …) |
 | `analyzer.ts` | Statistics extraction from event logs |
 | `types.ts` | Output schema types — Evan-approved before runner code is written |
 | `strategies/random.ts` | Random-move strategy |
 | `strategies/greedy.ts` | Greedy strategy (highest immediate result) |
 | `strategies/heuristic.ts` | Heuristic strategy (designed-intent play) |
+| `strategies/weighted-heuristic.ts` | Heuristic with tunable feature weights (fit-weights output) |
+| `strategies/long-chain.ts` | Constructive long-chain strategies (`longRandomWalk`, `longGreedyWalk`, `milestonePush`) |
+| `strategies/archetypes.ts` | `strategicHumanLike` mode-switching strategy + research archetypes |
+| `strategies/common.ts` | Shared candidate enumeration and scoring helpers |
 
 Constraints:
 - Imports from `game-kernel` only.
@@ -156,9 +181,10 @@ Constraints:
 
 | Directory | Covers | Coverage requirement |
 |---|---|---|
-| `tests/game-kernel/` | All `src/game-kernel/` modules | **100%** |
+| `tests/game-kernel/` | All `src/game-kernel/` modules | **100%** (gate enforced in CI) |
 | `tests/game-session/` | `src/game-session/` | 90%+ |
 | `tests/sim-harness/` | `src/sim-harness/` | 80%+ |
+| `tests/tuning-console/` | `src/tuning-console/` | covers config-export round-trips |
 
 Test file naming: `[source-file-name].test.ts`
 
@@ -173,7 +199,7 @@ Constraints:
 
 | Path | Purpose |
 |---|---|
-| `workflows/ci.yml` | Required CI checks on every push to `develop` and `main` |
+| `workflows/ci.yml` | Required CI checks on every push to `main` and on PRs targeting `main` |
 | `ISSUE_TEMPLATE/design-question.md` | For spec gaps hit during implementation |
 | `ISSUE_TEMPLATE/bug.md` | For behavior that differs from spec |
 | `ISSUE_TEMPLATE/phase-gate.md` | For requesting Evan's phase gate review |

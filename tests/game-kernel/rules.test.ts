@@ -24,7 +24,7 @@ function makeBoard(cells: { row: number; col: number; value: number }[]): Board 
   );
 
   for (const { row, col, value } of cells) {
-    (grid[row] as Tile[])[col] = { value: value as TileValue, retired: false };
+    (grid[row] as Tile[])[col] = { value, retired: false };
   }
 
   return grid as Board;
