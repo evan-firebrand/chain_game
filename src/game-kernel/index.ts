@@ -170,6 +170,7 @@ export function createGame(config: GameConfig): GameState {
     maxTileEver: 0 as TileValue,
     spawnPoolMin: config.spawnPoolMin,
     spawnPoolMax: config.spawnPoolMax,
+    spawnWeights: config.spawnWeights,
     prngState,
     events: [],
   };
@@ -355,6 +356,9 @@ export function applyAction(state: GameState, action: Action): GameState {
         ...state.config,
         spawnPoolMin: state.spawnPoolMin,
         spawnPoolMax: state.spawnPoolMax,
+        // Merge: persisted high-tier weights from previous retirements, with live
+        // config weights on top so tuning console updates take effect immediately.
+        spawnWeights: { ...state.spawnWeights, ...state.config.spawnWeights },
       };
       let newSpawnPoolMin = state.spawnPoolMin;
       let newSpawnPoolMax = state.spawnPoolMax;
@@ -422,6 +426,7 @@ export function applyAction(state: GameState, action: Action): GameState {
         maxTileEver: newMaxTileEver,
         spawnPoolMin: newSpawnPoolMin,
         spawnPoolMax: newSpawnPoolMax,
+        spawnWeights: runtimeSpawnConfig.spawnWeights,
         prngState: newPrng,
         events: [...state.events, ...newEvents],
       };

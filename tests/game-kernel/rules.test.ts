@@ -91,6 +91,14 @@ describe('computeChainResult — mandatory T1-T8b spec vectors', () => {
   });
 });
 
+describe('computeChainResult — ruleK edge cases', () => {
+  it('ruleK=0 never divides by zero — result is lastValue × 2', () => {
+    const cfg: GameConfig = { ...DEFAULT_CONFIG, ruleK: 0 };
+    const { board, chain } = chainFromValues([2, 2, 2, 2, 2, 2]);
+    expect(computeChainResult(board, chain, cfg)).toBe(4);
+  });
+});
+
 describe('computeChainResult — property tests', () => {
   it('always returns a power of 2', () => {
     const isPowerOf2 = (n: number): boolean => n > 0 && (n & (n - 1)) === 0;
