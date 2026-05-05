@@ -8,7 +8,7 @@
 
 Chain Game is a browser-based 2D number-merging puzzle game with a path-chain mechanic; the design is complete and the engineering team is now building it in phases, starting with the pure game-logic kernel.
 
-**Current phase:** Phase 3 (Tuning Console) — kernel and playable v1 are complete, Tuning Console is next.
+**Current phase:** Phase 5.5 (Design Lab). Phases 0–5 are complete (kernel, playable v1, Tuning Console, retirement, simulation harness). Design-lab tooling is in place; broad matrix runs, `strategicHumanLike` refinement, and target-config selection are the active work. See `docs/engineering/PHASE_5_5_REQUIREMENTS.md` and `docs/engineering/PHASE_5_5_FINDINGS.md`.
 
 ---
 
@@ -62,31 +62,43 @@ chain-game/
 │       ├── FOLDER_STRUCTURE.md           ← canonical path map with ownership
 │       ├── PARAMETER_TIERS.md            ← which parameters are Tier 1/2/3
 │       ├── SIM_HARNESS_SCHEMA.md         ← simulation output schema
-│       ├── RETIREMENT_DESIGN_NOTES.md    ← created when Phase 4 lands
+│       ├── RETIREMENT_DESIGN_NOTES.md    ← Phase 4 retirement implementation notes
+│       ├── PHASE_5_5_REQUIREMENTS.md     ← Phase 5.5 design-lab scope
+│       ├── PHASE_5_5_FINDINGS.md         ← Phase 5.5 smoke results
 │       ├── session-briefs/               ← per-agent task context files
 │       ├── playtests/                    ← Evan's playtest notes
+│       ├── puzzles/                      ← canned board scenarios for replay/study
+│       ├── studies/                      ← multi-pass design investigations
 │       └── adr/                          ← Architecture Decision Records
 │           ├── 0000-tech-stack.md
-│           └── 0001-pure-kernel-module.md
+│           ├── 0001-pure-kernel-module.md
+│           └── 0002-session-update-config.md
 │
 ├── src/
 │   ├── game-kernel/          ← Game Logic Agent owns
-│   │   ├── index.ts          ← PUBLIC API ONLY (re-exports, no logic here)
+│   │   ├── index.ts          ← PUBLIC API (re-exports + applyAction orchestration)
 │   │   ├── types.ts          ← ALL GameState / Action / Config types
 │   │   ├── chain.ts          ← chain validation + resolution
 │   │   ├── board.ts          ← grid ops, gravity, tile spawn
 │   │   ├── rules.ts          ← Rule D k=2 implementation
-│   │   └── retirement.ts     ← stub in Phase 1; fully implemented in Phase 4
+│   │   ├── retirement.ts     ← retirement trigger detection + spawn-pool advancement
+│   │   └── values.ts         ← TileValue helpers (next/previous/range iteration)
 │   │
 │   ├── game-session/         ← Game Logic Agent owns
+│   │   ├── index.ts          ← public re-exports
 │   │   ├── session.ts        ← wraps kernel calls, maintains session state, emits events
-│   │   └── events.ts         ← event type definitions
+│   │   ├── events.ts         ← event type definitions
+│   │   └── playlog.ts        ← per-turn playlog recorder for fit-weights / replay
 │   │
 │   ├── ui/                   ← UI Agent owns
 │   │   ├── app.ts
 │   │   ├── board.ts
 │   │   ├── input.ts          ← MUST be a distinct module (swappable mouse/touch)
-│   │   └── hud.ts
+│   │   ├── hud.ts
+│   │   ├── effects.ts        ← screen pulse / merge burst / conquest celebration
+│   │   ├── geometry.ts       ← canvas grid math
+│   │   ├── playlog-controls.ts ← UI for playlog download
+│   │   └── theme.ts          ← color tokens for tile tiers
 │   │
 │   ├── tuning-console/       ← UI Agent owns
 │   │   ├── console.ts
@@ -94,19 +106,28 @@ chain-game/
 │   │   └── config-export.ts
 │   │
 │   └── sim-harness/          ← Simulation Agent owns
+│       ├── index.ts          ← public re-exports
 │       ├── runner.ts
 │       ├── sweep.ts
+│       ├── batch.ts          ← matrix runner for design-lab profiles
+│       ├── profiles.ts       ← named experiment configs
+│       ├── scoring.ts        ← target-distance scoring + candidate labels
 │       ├── analyzer.ts
 │       ├── types.ts
 │       └── strategies/
 │           ├── random.ts
 │           ├── greedy.ts
-│           └── heuristic.ts
+│           ├── heuristic.ts
+│           ├── weighted-heuristic.ts
+│           ├── long-chain.ts          ← longRandomWalk / longGreedyWalk / milestonePush
+│           ├── archetypes.ts          ← strategicHumanLike + research archetypes
+│           └── common.ts              ← shared candidate enumeration + helpers
 │
 └── tests/                    ← Test Agent owns
     ├── game-kernel/
     ├── game-session/
-    └── sim-harness/
+    ├── sim-harness/
+    └── tuning-console/
 ```
 
 ---
@@ -190,7 +211,7 @@ When you hit an ambiguity not covered by the spec:
 
 **Phase 1 — game-kernel** ✅ COMPLETE (2026-04-28)
 - All T1-T8b test vectors pass
-- ≥93% line/100% function coverage on `src/game-kernel/`
+- 100% line/function coverage gate on `src/game-kernel/`
 - Property tests: valid chain always returns power-of-2
 - Kernel source confirmed by Evan
 - Zero imports outside `src/game-kernel/`
@@ -203,16 +224,29 @@ When you hit an ambiguity not covered by the spec:
 - Zero game logic in UI layer (CI boundary check passes)
 
 **Phase 3 — Tuning Console** ✅ COMPLETE (2026-04-28, UAT passed)
-
 - [x] All Tier 1 parameters exposed (k, spawn weights per tier)
 - [x] Changing k mid-game produces correct results on next chain
 - [x] Config exportable as JSON
 - [x] Evan UAT passed
 
-Also delivered:
-- `docs/engineering/PARAMETER_TIERS.md`
-- ADR 0002 — `GameSession.updateConfig` Tier 1/2 contract
-- Backfilled `tests/game-session/` Phase 2 deferred suite (18 tests, 100% coverage)
+Also delivered: `docs/engineering/PARAMETER_TIERS.md`; ADR 0002 — `GameSession.updateConfig` Tier 1/2 contract; backfilled `tests/game-session/` deferred suite.
+
+**Phase 4 — Retirement** ✅ COMPLETE
+- Retirement trigger detection and spawn-pool advancement implemented in `src/game-kernel/retirement.ts`
+- Lifecycle framing (Free Play → Friction → Cleanup → Conquest) reflected in code and UI
+- See `docs/engineering/RETIREMENT_DESIGN_NOTES.md`
+
+**Phase 5 — Simulation Harness** ✅ COMPLETE
+- Headless runner, sweep, analyzer, and strategy ladder (random, greedy, heuristic, weighted-heuristic, long-chain, archetypes/strategicHumanLike) shipped under `src/sim-harness/`
+- 8.4× sweep speedup landed before tooling expansion (kernel + harness perf pass)
+- Output schema in `docs/engineering/SIM_HARNESS_SCHEMA.md`
+
+**Phase 5.5 — Design Lab** 🟡 IN PROGRESS
+- Tooling: experiment profiles, target scoring, batch runner, candidate labels, and replay-seed capture all in place
+- Smoke pass complete; broad 12-profile sweep timed out — runtime optimization needed
+- Open work: refine `strategicHumanLike` recovery dominance, run the full coarse sweep, then skill-curve comparison
+- Decision outputs (per `PHASE_5_5_REQUIREMENTS.md`): tune existing knobs / change a kernel rule / add companion pressure mechanic / accept Endless as forgiving
+- See `docs/engineering/PHASE_5_5_REQUIREMENTS.md` and `PHASE_5_5_FINDINGS.md`
 
 See `docs/engineering/ARCHITECTURE.md` for full phase sequence.
 
