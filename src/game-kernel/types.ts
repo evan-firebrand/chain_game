@@ -17,6 +17,8 @@ export interface Tile {
   readonly value: TileValue;
   /** True if this tile's tier has retired from the spawn pool. */
   readonly retired: boolean;
+  /** True if this retired tile can never be cleared — no reachable matching partner exists. */
+  readonly critical: boolean;
 }
 
 // ─── Board ─────────────────────────────────────────────────────────────────

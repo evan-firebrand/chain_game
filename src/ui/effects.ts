@@ -1,6 +1,6 @@
-import type { Cell, TileValue } from '../game-session/index.js';
+import type { Board, Cell, TileValue } from '../game-session/index.js';
 import { EASE, DURATION, tileTheme } from './theme.js';
-import { TILE, GAP } from './geometry.js';
+import { TILE, GAP, RADIUS, tileOriginX, tileOriginY, roundRectPath } from './geometry.js';
 
 export type Effect =
   | { type: 'tile-spawn'; cell: Cell; value: TileValue; start: number; duration: number }
@@ -164,6 +164,7 @@ export interface EffectRenderCtx {
   now: number;
   boardW: number;
   boardH: number;
+  board?: Board;
 }
 
 export function renderEffect(effect: Effect, r: EffectRenderCtx): void {
@@ -261,6 +262,23 @@ function renderScreenPulse(effect: Extract<Effect, { type: 'screen-pulse' }>, t:
   grad.addColorStop(1, 'rgba(0,0,0,0)');
   ctx.fillStyle = grad;
   ctx.globalAlpha = fade * 0.5;
+
+  // Clip to active (non-retired) tile shapes so retired and critical tiles don't brighten
+  if (r.board !== undefined) {
+    ctx.beginPath();
+    const rows = r.board.length;
+    const cols = r.board[0]?.length ?? 0;
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const tile = r.board[row]?.[col];
+        if (tile !== undefined && tile.value !== 0 && !tile.retired) {
+          roundRectPath(ctx, tileOriginX(col), tileOriginY(row), TILE, TILE, RADIUS);
+        }
+      }
+    }
+    ctx.clip();
+  }
+
   ctx.fillRect(0, 0, r.boardW, r.boardH);
   ctx.restore();
 }

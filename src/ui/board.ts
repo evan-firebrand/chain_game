@@ -66,6 +66,7 @@ export function renderBoard(ctx: CanvasRenderingContext2D, s: RenderState): void
         inChain, isLast, isValidNext, hasActiveChain,
         anim,
         retired: tile.retired,
+        critical: tile.critical,
         now,
       });
     }
@@ -84,6 +85,7 @@ export function renderBoard(ctx: CanvasRenderingContext2D, s: RenderState): void
       drawTileBody(ctx, c, r, tile.value, tile.retired, {
         inChain, isLast, isValidNext, hasActiveChain,
         anim,
+        critical: tile.critical,
         now,
       });
     }
@@ -99,7 +101,7 @@ export function renderBoard(ctx: CanvasRenderingContext2D, s: RenderState): void
 
   // Pass 6: effects (particles, flashes, confetti, sweeps)
   for (const e of activeEffects) {
-    renderEffect(e, { ctx, now, boardW: W, boardH: H });
+    renderEffect(e, { ctx, now, boardW: W, boardH: H, board });
   }
 }
 
@@ -132,6 +134,7 @@ interface DrawOpts {
   hasActiveChain: boolean;
   anim: ReturnType<typeof sampleTileAnim>;
   now: number;
+  critical: boolean;
 }
 
 function drawTileAura(
@@ -158,7 +161,8 @@ function drawTileAura(
   }
   // Dim non-eligible tiles when chain is active
   if (opts.hasActiveChain && !opts.inChain && !opts.isValidNext) auraStrength *= 0.45;
-  if (opts.retired) auraStrength *= 0.6;
+  // Critical tiles have nearly no aura — they're already gone
+  if (opts.retired) auraStrength *= opts.critical ? 0.15 : 0.6;
   auraStrength += opts.anim.glowBoost;
 
   ctx.save();
@@ -187,7 +191,8 @@ function drawTileBody(
   const scale = opts.anim.scale;
 
   ctx.save();
-  ctx.globalAlpha = opts.anim.alpha;
+  // Critical tiles render as ghosts — tile is already lost
+  ctx.globalAlpha = opts.anim.alpha * (retired && opts.critical ? 0.35 : 1);
   ctx.translate(cx, cy);
   ctx.scale(scale, scale);
   ctx.translate(-TILE / 2, -TILE / 2);

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   advanceSpawnPool,
   checkRetirement,
+  computeCriticalTiles,
   markRetiredTiles,
 } from '../../src/game-kernel/retirement.js';
 import { applyAction, setTile, spawnTiles, validateChain } from '../../src/game-kernel/index.js';
@@ -42,7 +43,7 @@ function cell(row: number, col: number): Cell {
 
 function emptyBoard(rows: number, cols: number): Board {
   return Array.from({ length: rows }, () =>
-    Array.from({ length: cols }, () => ({ value: 0 as TileValue, retired: false }))
+    Array.from({ length: cols }, () => ({ value: 0 as TileValue, retired: false, critical: false }))
   ) as Board;
 }
 
@@ -67,29 +68,29 @@ function tileAt(board: Board, row: number, col: number): Tile {
 
 function makeRetirementTriggerBoard(): Board {
   let board = emptyBoard(3, 3);
-  board = setTile(board, cell(0, 0), { value: 256 as TileValue, retired: false });
-  board = setTile(board, cell(0, 1), { value: 256 as TileValue, retired: false });
-  board = setTile(board, cell(0, 2), { value: 2 as TileValue, retired: false });
-  board = setTile(board, cell(1, 0), { value: 2 as TileValue, retired: false });
-  board = setTile(board, cell(1, 1), { value: 4 as TileValue, retired: false });
-  board = setTile(board, cell(1, 2), { value: 8 as TileValue, retired: false });
-  board = setTile(board, cell(2, 0), { value: 16 as TileValue, retired: false });
-  board = setTile(board, cell(2, 1), { value: 32 as TileValue, retired: false });
-  board = setTile(board, cell(2, 2), { value: 64 as TileValue, retired: false });
+  board = setTile(board, cell(0, 0), { value: 256 as TileValue, retired: false, critical: false });
+  board = setTile(board, cell(0, 1), { value: 256 as TileValue, retired: false, critical: false });
+  board = setTile(board, cell(0, 2), { value: 2 as TileValue, retired: false, critical: false });
+  board = setTile(board, cell(1, 0), { value: 2 as TileValue, retired: false, critical: false });
+  board = setTile(board, cell(1, 1), { value: 4 as TileValue, retired: false, critical: false });
+  board = setTile(board, cell(1, 2), { value: 8 as TileValue, retired: false, critical: false });
+  board = setTile(board, cell(2, 0), { value: 16 as TileValue, retired: false, critical: false });
+  board = setTile(board, cell(2, 1), { value: 32 as TileValue, retired: false, critical: false });
+  board = setTile(board, cell(2, 2), { value: 64 as TileValue, retired: false, critical: false });
   return board;
 }
 
 function makeOvershootBoard(): Board {
   let board = emptyBoard(3, 3);
-  board = setTile(board, cell(0, 0), { value: 1024 as TileValue, retired: false });
-  board = setTile(board, cell(0, 1), { value: 1024 as TileValue, retired: false });
-  board = setTile(board, cell(0, 2), { value: 2 as TileValue, retired: false });
-  board = setTile(board, cell(1, 0), { value: 4 as TileValue, retired: false });
-  board = setTile(board, cell(1, 1), { value: 8 as TileValue, retired: false });
-  board = setTile(board, cell(1, 2), { value: 16 as TileValue, retired: false });
-  board = setTile(board, cell(2, 0), { value: 32 as TileValue, retired: false });
-  board = setTile(board, cell(2, 1), { value: 64 as TileValue, retired: false });
-  board = setTile(board, cell(2, 2), { value: 128 as TileValue, retired: false });
+  board = setTile(board, cell(0, 0), { value: 1024 as TileValue, retired: false, critical: false });
+  board = setTile(board, cell(0, 1), { value: 1024 as TileValue, retired: false, critical: false });
+  board = setTile(board, cell(0, 2), { value: 2 as TileValue, retired: false, critical: false });
+  board = setTile(board, cell(1, 0), { value: 4 as TileValue, retired: false, critical: false });
+  board = setTile(board, cell(1, 1), { value: 8 as TileValue, retired: false, critical: false });
+  board = setTile(board, cell(1, 2), { value: 16 as TileValue, retired: false, critical: false });
+  board = setTile(board, cell(2, 0), { value: 32 as TileValue, retired: false, critical: false });
+  board = setTile(board, cell(2, 1), { value: 64 as TileValue, retired: false, critical: false });
+  board = setTile(board, cell(2, 2), { value: 128 as TileValue, retired: false, critical: false });
   return board;
 }
 
@@ -169,16 +170,91 @@ describe('markRetiredTiles', () => {
   it('retired tiles remain on board with retired=true flag', () => {
     const board = makeRetirementTriggerBoard();
     const marked = markRetiredTiles(board, 2 as TileValue);
-    expect(tileAt(marked, 0, 2)).toEqual({ value: 2, retired: true });
-    expect(tileAt(marked, 1, 0)).toEqual({ value: 2, retired: true });
-    expect(tileAt(marked, 1, 1)).toEqual({ value: 4, retired: false });
+    expect(tileAt(marked, 0, 2)).toEqual({ value: 2, retired: true, critical: false });
+    expect(tileAt(marked, 1, 0)).toEqual({ value: 2, retired: true, critical: false });
+    expect(tileAt(marked, 1, 1)).toEqual({ value: 4, retired: false, critical: false });
   });
 
   it('adjacent retired tiles remain mechanically chainable', () => {
     let board = emptyBoard(2, 2);
-    board = setTile(board, cell(0, 0), { value: 2 as TileValue, retired: true });
-    board = setTile(board, cell(0, 1), { value: 2 as TileValue, retired: true });
+    board = setTile(board, cell(0, 0), { value: 2 as TileValue, retired: true, critical: false });
+    board = setTile(board, cell(0, 1), { value: 2 as TileValue, retired: true, critical: false });
     expect(validateChain(board, [cell(0, 0), cell(0, 1)]).valid).toBe(true);
+  });
+});
+
+describe('computeCriticalTiles', () => {
+  it('returns board unchanged when no tiles are retired', () => {
+    const board = makeRetirementTriggerBoard();
+    const result = computeCriticalTiles(board);
+    // Non-retired tiles must never be marked critical
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        expect(tileAt(result, r, c).critical).toBe(false);
+      }
+    }
+  });
+
+  it('marks a lone retired tile critical when no matching value exists anywhere on the board', () => {
+    let board = emptyBoard(2, 2);
+    board = setTile(board, cell(0, 0), { value: 4 as TileValue, retired: true, critical: false });
+    board = setTile(board, cell(0, 1), { value: 8 as TileValue, retired: false, critical: false });
+    const result = computeCriticalTiles(board);
+    expect(tileAt(result, 0, 0).critical).toBe(true);
+    expect(tileAt(result, 0, 1).critical).toBe(false); // non-retired, never critical
+  });
+
+  it('does not mark retired tiles critical when matching partners are in adjacent columns', () => {
+    // Also exercises tc<0 (col 0, dc=-1) and tc>=cols (col 2, dc=+1) bounds checks
+    let board = emptyBoard(1, 3);
+    board = setTile(board, cell(0, 0), { value: 4 as TileValue, retired: true, critical: false });
+    board = setTile(board, cell(0, 1), { value: 4 as TileValue, retired: true, critical: false });
+    const result = computeCriticalTiles(board);
+    expect(tileAt(result, 0, 0).critical).toBe(false);
+    expect(tileAt(result, 0, 1).critical).toBe(false);
+  });
+
+  it('does not mark retired tiles critical when a same-column partner has no critical tile blocking the path', () => {
+    let board = emptyBoard(3, 1);
+    board = setTile(board, cell(0, 0), { value: 4 as TileValue, retired: true, critical: false });
+    board = setTile(board, cell(1, 0), { value: 8 as TileValue, retired: false, critical: false });
+    board = setTile(board, cell(2, 0), { value: 4 as TileValue, retired: true, critical: false });
+    const result = computeCriticalTiles(board);
+    expect(tileAt(result, 0, 0).critical).toBe(false);
+    expect(tileAt(result, 2, 0).critical).toBe(false);
+  });
+
+  it('skips a pre-critical tile as a potential partner, marking the dependent tile critical', () => {
+    let board = emptyBoard(1, 3);
+    board = setTile(board, cell(0, 0), { value: 4 as TileValue, retired: true, critical: false });
+    // col 1: already critical — must not count as a valid partner
+    board = setTile(board, cell(0, 1), { value: 4 as TileValue, retired: true, critical: true });
+    const result = computeCriticalTiles(board);
+    expect(tileAt(result, 0, 0).critical).toBe(true);
+    expect(tileAt(result, 0, 1).critical).toBe(true); // preserved
+  });
+
+  it('cascades: lone retired tile becomes critical, then blocks same-column partners making them critical too', () => {
+    // Pass 1: lone retired 8 (no other 8 anywhere) → marked critical
+    // Pass 2: retired 8 is now critical and sits between the two retired 4s →
+    //         both 4s have their same-column path blocked → both marked critical
+    let board = emptyBoard(3, 1);
+    board = setTile(board, cell(0, 0), { value: 4 as TileValue, retired: true, critical: false });
+    board = setTile(board, cell(1, 0), { value: 8 as TileValue, retired: true, critical: false });
+    board = setTile(board, cell(2, 0), { value: 4 as TileValue, retired: true, critical: false });
+    const result = computeCriticalTiles(board);
+    expect(tileAt(result, 0, 0).critical).toBe(true);
+    expect(tileAt(result, 1, 0).critical).toBe(true);
+    expect(tileAt(result, 2, 0).critical).toBe(true);
+  });
+
+  it('does not mark non-retired tiles as critical even when they have no matching neighbor', () => {
+    let board = emptyBoard(1, 2);
+    board = setTile(board, cell(0, 0), { value: 4 as TileValue, retired: false, critical: false });
+    board = setTile(board, cell(0, 1), { value: 8 as TileValue, retired: false, critical: false });
+    const result = computeCriticalTiles(board);
+    expect(tileAt(result, 0, 0).critical).toBe(false);
+    expect(tileAt(result, 0, 1).critical).toBe(false);
   });
 });
 

@@ -34,7 +34,7 @@ export function removeTiles(board: Board, cells: readonly Cell[]): Board {
   const cellSet = new Set(cells.map(c => `${c.row},${c.col}`));
   return board.map((rowArr, r) =>
     rowArr.map((tile, c) =>
-      cellSet.has(`${r},${c}`) ? { value: 0 as TileValue, retired: false } : tile
+      cellSet.has(`${r},${c}`) ? { value: 0 as TileValue, retired: false, critical: false } : tile
     )
   ) as Board;
 }
@@ -52,7 +52,7 @@ export function applyGravity(board: Board): Board {
 
   // Build new board as mutable array
   const newBoard: Tile[][] = Array.from({ length: rows }, () =>
-    Array.from({ length: cols }, () => ({ value: 0 as TileValue, retired: false }))
+    Array.from({ length: cols }, () => ({ value: 0 as TileValue, retired: false, critical: false }))
   );
 
   for (let c = 0; c < cols; c++) {
@@ -174,7 +174,7 @@ export function spawnTiles(
     const rand = lcgFloat(currentPrng);
     const value = pickTileValue(config, rand);
 
-    currentBoard = setTile(currentBoard, cell, { value, retired: false });
+    currentBoard = setTile(currentBoard, cell, { value, retired: false, critical: false });
     spawned.push({ cell, value });
   }
 
