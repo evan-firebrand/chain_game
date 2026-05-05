@@ -29,7 +29,6 @@ import {
   applyAction,
   computeChainResult,
   getAdjacentCells,
-  validateChain,
   validateChainExtension,
 } from '../src/game-kernel/index.js';
 import type {
@@ -191,24 +190,31 @@ function cellKey(c: Cell): string {
 function streamCandidates(
   board: Board,
   maxLen: number,
+  maxCandidates: number,
   onCandidate: (chain: readonly Cell[]) => void,
 ): void {
   const rows = board.length;
   const cols = board[0]?.length ?? 0;
   const total = rows * cols;
   const path: Cell[] = [];
-  const used = new Uint8Array(total); // flat cell index → 1 if in path
+  const used = new Uint8Array(total);
+  let count = 0;
 
   function idx(r: number, c: number): number { return r * cols + c; }
 
   function dfs(): void {
-    if (path.length >= 2) onCandidate(path);
+    if (count >= maxCandidates) return;
+    if (path.length >= 2) { onCandidate(path); count++; }
     if (path.length >= maxLen) return;
     const last = path[path.length - 1]!;
+    const lastTile = board[last.row]?.[last.col];
+    if (!lastTile) return;
     for (const nb of getAdjacentCells(last, rows, cols)) {
+      if (count >= maxCandidates) return;
       if (used[idx(nb.row, nb.col)]) continue;
-      const next = [...path, nb];
-      if (!validateChain(board, next).valid) continue;
+      const nbTile = board[nb.row]?.[nb.col];
+      if (!nbTile || nbTile.value === 0) continue;
+      if (!validateChainExtension(lastTile, nbTile).valid) continue;
       path.push(nb);
       used[idx(nb.row, nb.col)] = 1;
       dfs();
@@ -219,12 +225,15 @@ function streamCandidates(
 
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
+      if (count >= maxCandidates) return;
       const tile = board[r]?.[c];
       if (!tile || tile.value === 0) continue;
       const start: Cell = { row: r as Row, col: c as Col };
       for (const nb of getAdjacentCells(start, rows, cols)) {
-        const pair = [start, nb];
-        if (!validateChain(board, pair).valid) continue;
+        if (count >= maxCandidates) break;
+        const nbTile = board[nb.row]?.[nb.col];
+        if (!nbTile || nbTile.value === 0) continue;
+        if (!validateChainExtension(tile, nbTile).valid) continue;
         path.push(start, nb);
         used[idx(start.row, start.col)] = 1;
         used[idx(nb.row, nb.col)] = 1;
@@ -247,9 +256,12 @@ interface TurnSample {
   readonly humanIdx: number;
 }
 
-// Cap enumeration at this depth. Real play averages 10–20 tiles; 18 captures
-// the vast majority without the tree explosion that breaks at 20 on late boards.
-const ENUM_DEPTH = 18;
+// DFS depth cap. Real play averages 10–20 tiles; 14 covers the bulk without
+// the combinatorial explosion that OOMs on early-game boards full of same-value tiles.
+const ENUM_DEPTH = 14;
+// Per-turn candidate cap. Prevents early-game turns (many identical tiles, huge search
+// tree) from dominating memory. Human's chain is always added directly if not found.
+const MAX_CANDIDATES_PER_TURN = 8_000;
 
 function prepareSamples(records: PlaylogRecord[], config: GameConfig, verbose: boolean): TurnSample[] {
   const samples: TurnSample[] = [];
@@ -260,7 +272,7 @@ function prepareSamples(records: PlaylogRecord[], config: GameConfig, verbose: b
     const allFeatures: FeatureVector[] = [];
     let humanIdx = -1;
 
-    streamCandidates(rec.boardBefore, ENUM_DEPTH, chain => {
+    streamCandidates(rec.boardBefore, ENUM_DEPTH, MAX_CANDIDATES_PER_TURN, chain => {
       const key = chain.map(cellKey).join('|');
       try {
         const features = extractFeatures(rec.boardBefore, chain, rec.spawnPoolMaxBefore, config);
@@ -300,12 +312,14 @@ function topKAccuracy(samples: readonly TurnSample[], weights: HeuristicWeights,
   let hits = 0;
   for (const { humanFeatures, allFeatures } of samples) {
     const humanScore = score(humanFeatures, weights);
-    // Count how many candidates beat the human — if fewer than k, human is in top-k.
-    let betterCount = 0;
+    // Pessimistic rank: count candidates scoring >= human (human is in top-k only if this <= k).
+    // This prevents the degenerate all-zero-weights solution where every candidate ties and
+    // betterCount=0 < k trivially passes. With pessimistic rank, ties count against the human.
+    let betterOrEqual = 0;
     for (const feat of allFeatures) {
-      if (score(feat, weights) > humanScore) betterCount++;
+      if (score(feat, weights) >= humanScore) betterOrEqual++;
     }
-    if (betterCount < k) hits++;
+    if (betterOrEqual <= k) hits++;
   }
   return hits / samples.length;
 }

@@ -51,11 +51,12 @@ export interface HeuristicWeights {
   readonly triggersNextRetirement: number;
 }
 
+// Fitted from 252 human turns via scripts/fit-weights.ts (top-3 accuracy: 11.5%)
 export const DEFAULT_UNIT_WEIGHTS: HeuristicWeights = {
-  isolatedRetiredAfter: -1,
-  legalChainStartsAfter: 1,
+  isolatedRetiredAfter: -10,
+  legalChainStartsAfter: 0.5,
   maxTileVsSpawnPool: -1,
-  retiredClearedByThisChain: 1,
+  retiredClearedByThisChain: 6.5,
   triggersNextRetirement: -1,
 };
 
