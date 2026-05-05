@@ -171,12 +171,14 @@ CI runs a dependency boundary check on every push. Violations are build failures
 
 ## Branch Workflow
 
-See `docs/engineering/ARCHITECTURE.md` §Branch Strategy for the full rules. Short version: cut from `develop`, PR back to `develop`, never push directly to `develop` or `main`. Evan promotes `develop → main`.
+**Single-trunk model.** `main` is the only long-lived branch. Cut every change as a `feat/<slug>` or `fix/<slug>` (or `docs/`, `chore/`) branch off `origin/main`, push, and open a PR back to `main`. Direct pushes to `main` are blocked by branch protection — every change lands via a reviewed, CI-green PR.
 
-**Branch naming:** always use `feat/<slug>` or `fix/<slug>` cut from `origin/develop`. **Never work on the auto-generated `claude/<...>` worktree branch** — that is just a scratch worktree; cut a real feature branch from it immediately before doing any work.
+**Branch naming:** always use `feat/<slug>`, `fix/<slug>`, `docs/<slug>`, or `chore/<slug>` cut from `origin/main`. **Never work on the auto-generated `claude/<...>` worktree branch** — that is just a scratch worktree; cut a real feature branch from it immediately before doing any work.
 
 **Off-limits branches — do not read or use as context:**
 - `archive/v1` — abandoned prototype, different codebase entirely
+
+> Historical note: prior to 2026-05-05 this project used a `develop` integration branch (`feat/* → develop → main`). It was collapsed into a single-trunk model with `main` as the integration branch. References to `develop` in older session briefs and ADRs reflect that earlier workflow.
 
 ---
 

@@ -199,7 +199,7 @@ Constraints:
 
 | Path | Purpose |
 |---|---|
-| `workflows/ci.yml` | Required CI checks on every push to `develop` and `main` |
+| `workflows/ci.yml` | Required CI checks on every push to `main` and on PRs targeting `main` |
 | `ISSUE_TEMPLATE/design-question.md` | For spec gaps hit during implementation |
 | `ISSUE_TEMPLATE/bug.md` | For behavior that differs from spec |
 | `ISSUE_TEMPLATE/phase-gate.md` | For requesting Evan's phase gate review |
