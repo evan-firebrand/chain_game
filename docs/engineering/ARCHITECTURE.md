@@ -95,20 +95,25 @@ This verbosity is intentional. The Simulation Harness needs full state snapshots
 
 ## Branch Strategy
 
+Single-trunk model. `main` is the only long-lived branch.
+
 ```
-main              ← protected; Evan-only merge; deploys to production
-  └── develop     ← integration branch; all agent PRs target this
-        ├── feat/kernel-phase1
-        ├── feat/ui-phase2
-        ├── feat/tests-phase1
-        ├── feat/sim-harness
-        └── fix/[issue-number]-[description]
+main              ← protected; integration branch; deploys to production
+  ├── feat/<slug>          ← new features
+  ├── fix/<slug>           ← bug fixes
+  ├── docs/<slug>          ← documentation changes
+  ├── chore/<slug>         ← maintenance / refactors
+  └── arch/<slug>          ← architectural / cross-cutting work
 ```
 
 Rules:
-- All feature branches are cut from `develop`, never from another feature branch.
-- Agents never push directly to `develop` or `main`.
-- Every task lands in a PR. No direct commits.
+- Every change is cut from `origin/main` and PR'd back to `main`.
+- Branches are never cut from another feature branch.
+- Direct pushes to `main` are blocked by branch protection. Every change lands via a reviewed, CI-green PR.
+- Squash-merge is the standard merge style.
+- Branch names use `<type>/<short-slug>` form. Never work on the auto-generated `claude/<...>` worktree branch — cut a real feature branch from it before doing any work.
+
+> Historical note: prior to 2026-05-05 this project used a `develop` integration branch (`feat/* → develop → main`). It was collapsed into a single-trunk model with `main` as the integration branch in PR #41. References to `develop` in older session briefs and ADRs reflect that earlier workflow.
 
 ---
 
